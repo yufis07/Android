@@ -18,20 +18,28 @@ import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.gamedeals.watchlist.data.AppDatabase
+import com.gamedeals.watchlist.data.Prefs
+import com.gamedeals.watchlist.data.WatchRepository
 import com.gamedeals.watchlist.data.Store
+import com.gamedeals.watchlist.price.GameCard
 import com.gamedeals.watchlist.price.PriceParser
 import com.gamedeals.watchlist.price.PriceScripts
 import com.gamedeals.watchlist.price.PriceUpdater
+import com.gamedeals.watchlist.price.SiteListAdd
 import com.gamedeals.watchlist.price.UrlUtils
 import com.gamedeals.watchlist.ui.AppRoot
+import com.gamedeals.watchlist.ui.BrowserCallbacks
 import com.gamedeals.watchlist.ui.BrowserState
 import com.gamedeals.watchlist.ui.DealsTheme
+import com.gamedeals.watchlist.web.evaluate
 import com.gamedeals.watchlist.work.WebViewPriceRefresher
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-class MainActivity : ComponentActivity() {
+class MainActivity : ComponentActivity(), BrowserCallbacks {
 
     private val browsers = mutableMapOf<Store, BrowserState>()
+    private val repo by lazy { WatchRepository(AppDatabase.get(this).watchDao()) }
 
     /** A URL (from a notification or shared link) the UI should open. */
     var pendingOpenUrl by mutableStateOf<String?>(null)
@@ -66,20 +74,62 @@ class MainActivity : ComponentActivity() {
 
     /** Returns (creating on first use) the WebView-backed browser for [store]. */
     fun browser(store: Store): BrowserState =
-        browsers.getOrPut(store) { BrowserState.create(this, store, ::onPageLoaded) }
+        browsers.getOrPut(store) { BrowserState.create(this, store, this) }
 
-    /** When you visit a page that's on your watchlist, quietly refresh its stored price. */
-    private fun onPageLoaded(url: String, view: WebView) {
+    /**
+     * After each page load:
+     *  - if the page is a watched game, quietly refresh its stored price;
+     *  - if auto-sync is on, add any games marked as on your site watchlist / wishlist.
+     */
+    override fun onPageLoaded(url: String, view: WebView) {
         lifecycleScope.launch {
-            val item = AppDatabase.get(this@MainActivity).watchDao().findByUrl(UrlUtils.normalize(url)) ?: return@launch
-            view.postDelayed({
-                view.evaluateJavascript(PriceScripts.EXTRACT) { result ->
-                    val info = PriceParser.fromJsResult(result) ?: return@evaluateJavascript
-                    if (info.price == null) return@evaluateJavascript
-                    lifecycleScope.launch { PriceUpdater.apply(this@MainActivity, item.id, info, notify = false) }
+            delay(1_200) // let the page finish rendering prices and list icons
+            val item = AppDatabase.get(this@MainActivity).watchDao().findByUrl(UrlUtils.normalize(url))
+            if (item != null) {
+                val info = PriceParser.fromJsResult(view.evaluate(PriceScripts.EXTRACT))
+                if (info?.price != null) PriceUpdater.apply(this@MainActivity, item.id, info, notify = false)
+            }
+            if (Prefs.autoSync(this@MainActivity)) {
+                val store = Store.fromUrl(url) ?: return@launch
+                val onSiteLists = scanPage(view).filter { it.onSiteList }
+                if (onSiteLists.isEmpty()) return@launch
+                val added = repo.importCards(store, onSiteLists)
+                if (added > 0) {
+                    toast("Synced $added game${if (added == 1) "" else "s"} from your ${store.host} lists")
                 }
-            }, 1_200)
+            }
         }
+    }
+
+    /** You tapped the site's own "Add to Watchlist / Wishlist" — mirror it in the app. */
+    override fun onSiteListAdd(add: SiteListAdd, view: WebView) {
+        if (!Prefs.autoSync(this)) return
+        lifecycleScope.launch {
+            val url = add.url?.takeIf { Store.fromUrl(it) != null }
+                ?: UrlUtils.gameUrl(add.pageUrl ?: view.url, add.gameId)
+                ?: return@launch
+            val store = Store.fromUrl(url) ?: return@launch
+            var info = add.info
+            // Added from the game's own page: read its full details from the page.
+            if (UrlUtils.normalize(url) == UrlUtils.normalize(view.url ?: "")) {
+                PriceParser.fromJsResult(view.evaluate(PriceScripts.EXTRACT))?.let { info = it }
+            }
+            val title = info.title ?: "Game #${add.gameId}"
+            val listName = if (add.list.startsWith("wish")) "wishlist" else "watchlist"
+            if (repo.addIfMissing(url, store, title, info)) {
+                toast("“$title” added to your $listName and the app watchlist")
+            }
+        }
+    }
+
+    /** Game cards on the page shown in [view] (used by import and auto-sync). */
+    suspend fun scanPage(view: WebView): List<GameCard> =
+        PriceParser.cardsFromJsResult(view.evaluate(PriceScripts.SCAN_PAGE))
+
+    suspend fun importCards(store: Store, cards: List<GameCard>): Int = repo.importCards(store, cards)
+
+    fun toast(message: String) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     }
 
     /** Re-checks every watched game using an off-screen browser. */

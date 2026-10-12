@@ -5,6 +5,7 @@ import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
 import android.webkit.CookieManager
+import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -16,7 +17,33 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.gamedeals.watchlist.data.Prefs
 import com.gamedeals.watchlist.data.Store
+import com.gamedeals.watchlist.price.PriceParser
+import com.gamedeals.watchlist.price.PriceScripts
+import com.gamedeals.watchlist.price.SiteListAdd
 import com.gamedeals.watchlist.web.AdBlocker
+
+/** Events from the site tabs that the activity reacts to. */
+interface BrowserCallbacks {
+    fun onPageLoaded(url: String, view: WebView)
+
+    /** You used the site's own "Add to Watchlist / Wishlist" button. */
+    fun onSiteListAdd(add: SiteListAdd, view: WebView)
+}
+
+/** Receives messages from [PriceScripts.SITE_BRIDGE] running in the page. */
+private class SiteBridge(
+    private val view: WebView,
+    private val callbacks: BrowserCallbacks,
+) {
+    @JavascriptInterface
+    fun onSiteListAdd(json: String) {
+        val add = PriceParser.siteAddFromJson(json) ?: return
+        view.post {
+            // Only trust messages while a deal site is the page shown in this tab.
+            if (Store.fromUrl(view.url) != null) callbacks.onSiteListAdd(add, view)
+        }
+    }
+}
 
 /**
  * One long-lived WebView per deal site, so each site keeps its own page, scroll
@@ -44,7 +71,7 @@ class BrowserState private constructor(val store: Store) {
         fun create(
             activity: Activity,
             store: Store,
-            onPageLoaded: (url: String, view: WebView) -> Unit,
+            callbacks: BrowserCallbacks,
         ): BrowserState {
             val state = BrowserState(store)
             val webView = WebView(activity)
@@ -78,6 +105,7 @@ class BrowserState private constructor(val store: Store) {
                     AdBlocker.intercept(request, Prefs.blockAds(activity))
 
                 override fun onPageCommitVisible(view: WebView, url: String?) {
+                    view.evaluateJavascript(PriceScripts.SITE_BRIDGE, null)
                     if (Prefs.blockAds(activity)) view.evaluateJavascript(AdBlocker.HIDE_ADS_SCRIPT, null)
                 }
 
@@ -90,10 +118,11 @@ class BrowserState private constructor(val store: Store) {
                     state.loading = false
                     state.syncNav(view)
                     CookieManager.getInstance().flush()
+                    view.evaluateJavascript(PriceScripts.SITE_BRIDGE, null)
                     if (Prefs.blockAds(activity)) view.evaluateJavascript(AdBlocker.HIDE_ADS_SCRIPT, null)
                     if (url != null) {
                         state.url = url
-                        onPageLoaded(url, view)
+                        callbacks.onPageLoaded(url, view)
                     }
                 }
 
@@ -111,6 +140,7 @@ class BrowserState private constructor(val store: Store) {
                     if (!title.isNullOrBlank()) state.title = title
                 }
             }
+            webView.addJavascriptInterface(SiteBridge(webView, callbacks), "GameDealsApp")
             state.webView = webView
             webView.loadUrl(store.homeUrl)
             return state

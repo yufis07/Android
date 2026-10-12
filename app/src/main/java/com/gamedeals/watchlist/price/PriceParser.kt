@@ -51,6 +51,7 @@ object PriceParser {
     fun cleanTitle(raw: String?): String? {
         if (raw.isNullOrBlank()) return null
         var t = raw.trim().split(Regex("""\s+[—–|•]\s+""")).first()
+        t = t.replace(Regex("""(?i)^\s*-?\d+%\s+(discount|off)\s+on\s+"""), "")
         t = t.replace(Regex("""(?i)\s+(price history|prices? (on|for|in)\b).*$"""), "")
         return t.trim().ifBlank { raw.trim() }
     }
@@ -75,6 +76,55 @@ object PriceParser {
             )
         }.getOrNull()
     }
+
+    /** Parses the JSON array returned by [PriceScripts.SCAN_PAGE]. */
+    fun cardsFromJsResult(result: String?): List<GameCard> {
+        if (result.isNullOrBlank() || result == "null") return emptyList()
+        return runCatching {
+            val decoded = JSONTokener(result).nextValue()
+            val arr = when (decoded) {
+                is String -> JSONArray(decoded)
+                is JSONArray -> decoded
+                else -> return emptyList()
+            }
+            (0 until arr.length()).mapNotNull { i ->
+                val o = arr.optJSONObject(i) ?: return@mapNotNull null
+                val url = o.str("url") ?: return@mapNotNull null
+                val priceText = o.str("priceText")
+                GameCard(
+                    url = url,
+                    title = o.str("title") ?: return@mapNotNull null,
+                    info = PriceInfo(
+                        title = o.str("title"),
+                        price = parseNumber(priceText),
+                        priceText = priceText,
+                        currency = PriceFormat.symbolFrom(priceText),
+                        imageUrl = o.str("image"),
+                    ),
+                    onSiteList = o.optBoolean("watchlisted") || o.optBoolean("wishlisted"),
+                )
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    /** Parses the JSON sent by [PriceScripts.SITE_BRIDGE] when a site watchlist/wishlist button is used. */
+    fun siteAddFromJson(json: String): SiteListAdd? = runCatching {
+        val o = JSONObject(json)
+        val priceText = o.str("priceText")
+        SiteListAdd(
+            gameId = o.str("gameId") ?: return null,
+            list = o.str("list") ?: "watchlist",
+            url = o.str("url"),
+            pageUrl = o.str("pageUrl"),
+            info = PriceInfo(
+                title = cleanTitle(o.str("title")),
+                price = parseNumber(priceText),
+                priceText = priceText,
+                currency = PriceFormat.symbolFrom(priceText),
+                imageUrl = o.str("image"),
+            ),
+        )
+    }.getOrNull()
 
     /** Parses raw page HTML (used by the background worker). */
     fun fromHtml(html: String, baseUrl: String): PriceInfo {
@@ -106,9 +156,10 @@ object PriceParser {
                 }
             }
         }
-        if (acc.title == null) {
-            acc.title = attrOrText(doc.selectFirst("meta[property=\"og:title\"]")) ?: doc.title()
-        }
+        val name = doc.selectFirst(".game-title-info-name, [itemprop=name][class*=title], h1[itemprop=name]")
+            ?.text()?.trim()?.takeIf { it.isNotEmpty() }
+        acc.title = name ?: acc.title
+            ?: attrOrText(doc.selectFirst("meta[property=\"og:title\"]")) ?: doc.title()
         if (acc.image == null) {
             acc.image = attrOrText(doc.selectFirst("meta[property=\"og:image\"]"))
         }

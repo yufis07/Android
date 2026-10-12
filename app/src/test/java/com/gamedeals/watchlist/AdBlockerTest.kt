@@ -20,6 +20,15 @@ class AdBlockerTest {
             "fundingchoicesmessages.google.com",
             "imasdk.googleapis.com",
             "admob.com",
+            // other ad networks
+            "c.amazon-adsystem.com",
+            "ib.adnxs.com",
+            "static.criteo.net",
+            "cdn.taboola.com",
+            "widgets.outbrain.com",
+            "ads.pubmatic.com",
+            "fastlane.rubiconproject.com",
+            "match.adsrvr.org",
         ).forEach { assertTrue(it, AdBlocker.isAdHost(it)) }
     }
 
@@ -34,7 +43,27 @@ class AdBlockerTest {
             "fonts.googleapis.com",
             "www.gstatic.com",
             "notdoubleclick.net",
+            "store.playstation.com",
+            "challenges.cloudflare.com",
+            "connect.facebook.net",
             null,
         ).forEach { assertFalse(it.toString(), AdBlocker.isAdHost(it)) }
+    }
+
+    @Test
+    fun parsesDomainAndHostsLists() {
+        val list = AdBlocker.parseList(
+            """
+            # comment
+            adserver.example
+            0.0.0.0 tracker.example # trailing comment
+            127.0.0.1 localhost
+            psdeals.net
+            """.trimIndent()
+        )
+        assertTrue("adserver.example" in list)
+        assertTrue("tracker.example" in list)
+        assertFalse("localhost" in list)
+        assertFalse("psdeals.net" in list) // allow-listed
     }
 }

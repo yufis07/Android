@@ -6,6 +6,7 @@ object Prefs {
     private const val FILE = "settings"
     private const val KEY_INTERVAL = "check_interval_hours"
     private const val KEY_BLOCK_ADS = "block_ads"
+    private const val KEY_AUTO_SYNC = "auto_sync_site_lists"
     const val DEFAULT_INTERVAL_HOURS = 12
     val INTERVAL_OPTIONS = listOf(0, 6, 12, 24)
 
@@ -24,5 +25,13 @@ object Prefs {
     fun setBlockAds(context: Context, enabled: Boolean) {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .edit().putBoolean(KEY_BLOCK_ADS, enabled).apply()
+    }
+
+    fun autoSync(context: Context): Boolean =
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getBoolean(KEY_AUTO_SYNC, true)
+
+    fun setAutoSync(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_AUTO_SYNC, enabled).apply()
     }
 }

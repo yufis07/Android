@@ -48,6 +48,7 @@ fun AppRoot(activity: MainActivity) {
     var tab by rememberSaveable { mutableIntStateOf(WATCHLIST_TAB) }
     var intervalHours by remember { mutableIntStateOf(Prefs.intervalHours(activity)) }
     var blockAds by remember { mutableStateOf(Prefs.blockAds(activity)) }
+    var autoSync by remember { mutableStateOf(Prefs.autoSync(activity)) }
 
     // Notification taps and shared links ask us to open a specific page.
     val pending = activity.pendingOpenUrl
@@ -101,8 +102,19 @@ fun AppRoot(activity: MainActivity) {
                         state = activity.browser(store),
                         watchItems = watchItems,
                         onSave = { draft, title, target ->
-                            scope.launch { repo.addOrUpdate(draft.url, draft.store, title, draft.info, target) }
+                            scope.launch {
+                                repo.addOrUpdate(draft.url, draft.store, title, draft.info, target)
+                                activity.toast("“$title” saved to your watchlist")
+                            }
                         },
+                        onScanPage = { activity.scanPage(activity.browser(store).webView) },
+                        onImport = { cards ->
+                            scope.launch {
+                                val added = activity.importCards(store, cards)
+                                activity.toast("Imported $added game${if (added == 1) "" else "s"} to your watchlist")
+                            }
+                        },
+                        onMessage = activity::toast,
                     )
                 }
             } else {
@@ -111,6 +123,11 @@ fun AppRoot(activity: MainActivity) {
                     refreshProgress = activity.refreshProgress,
                     intervalHours = intervalHours,
                     blockAds = blockAds,
+                    autoSync = autoSync,
+                    onAutoSyncChange = { enabled ->
+                        autoSync = enabled
+                        Prefs.setAutoSync(activity, enabled)
+                    },
                     onBlockAdsChange = { enabled ->
                         blockAds = enabled
                         Prefs.setBlockAds(activity, enabled)

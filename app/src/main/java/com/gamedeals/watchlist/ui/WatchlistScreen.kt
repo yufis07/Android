@@ -68,6 +68,8 @@ fun WatchlistScreen(
     intervalHours: Int,
     blockAds: Boolean,
     onBlockAdsChange: (Boolean) -> Unit,
+    autoSync: Boolean,
+    onAutoSyncChange: (Boolean) -> Unit,
     onOpen: (WatchItem) -> Unit,
     onRefreshAll: () -> Unit,
     onUpdate: (WatchItem) -> Unit,
@@ -226,6 +228,8 @@ fun WatchlistScreen(
             currentInterval = intervalHours,
             blockAds = blockAds,
             onBlockAdsChange = onBlockAdsChange,
+            autoSync = autoSync,
+            onAutoSyncChange = onAutoSyncChange,
             onDismiss = { showSettings = false },
             onIntervalChange = onIntervalChange,
             onRunBackgroundCheck = {
@@ -253,10 +257,12 @@ private fun EmptyState(hasAny: Boolean) {
         if (!hasAny) {
             Spacer(Modifier.height(8.dp))
             Text(
-                "1. Open the Xbox, PlayStation or Nintendo tab and sign in.\n" +
-                    "2. Browse to a game's page.\n" +
-                    "3. Tap “Watch” and (optionally) set a target price.\n\n" +
-                    "You'll get a notification when it drops.",
+                "Open the Xbox, PlayStation or Nintendo tab and sign in, then either:\n\n" +
+                    "• open a game and tap “Watch”, or\n" +
+                    "• use the site's own Watchlist / Wishlist button, or\n" +
+                    "• open your watchlist on the site and choose ⋮ → “Import games from this page”.\n\n" +
+                    "Games already on your site lists are synced as you browse. " +
+                    "You'll get a notification when prices drop.",
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

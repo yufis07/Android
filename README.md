@@ -8,11 +8,13 @@ An Android app for **xbdeals.net**, **psdeals.net** and **ntdeals.net** in one p
 |---|---|
 | **One tab per site** | Xbox (xbdeals), PlayStation (psdeals) and Nintendo (ntdeals) each run in their own built-in browser tab. Each tab keeps its own page and history when you switch away. |
 | **Login** | Sign in on each site's own login page. Cookies are saved, so you stay signed in after you close the app. Your account features on each site (its own wishlist, region and so on) work the same as on the web. |
+| **Sync with your site lists** | When you tap a site's own **Watchlist** or **Wishlist** button, the game is added to the app's watchlist too. Games the site marks as on your lists are added automatically as you browse. You can turn this off under Settings → *Sync site watchlists*. |
+| **Import a page** | On any list page (your watchlist or wishlist on the site, a collection, or search results), tap ⋮ → **Import games from this page** and choose which games to add. |
 | **Watch button** | Open a game's page and tap **Watch**. The app reads the game's title and current price, and you can set a target price if you want one. |
 | **Unified watchlist** | Every watched game from all three stores in one list. Each entry shows the current price, your target and the lowest price seen. You can filter by store and sort by recent, closest to target or price. Tap an entry to open it. You can edit or delete entries, and undo a delete. |
 | **Price alerts** | Background checks run every 6, 12 or 24 hours (or never). You get a notification when a game reaches your target and when its price drops. Tapping the notification opens the game. |
 | **Check now** | The ↻ button re-checks every game with an off-screen browser, which gets past bot checks the same way your normal browsing does. Visiting a watched game's page also updates its saved price automatically. |
-| **Google ad blocking** | Requests to Google's ad network (AdMob, AdSense, Ad Manager/DoubleClick, ad-blocker-detection messages) are blocked inside the site tabs, and empty ad slots are hidden. You can turn it off under Settings → *Block Google ads*. |
+| **Ad blocking** | Blocks Google ads (AdMob, AdSense, Ad Manager/DoubleClick) and other ad networks such as Amazon, Criteo, Taboola, Outbrain, PubMatic, Rubicon and AppNexus inside the site tabs. A built-in list of about 200 ad domains is combined with a community ad-server list (pgl.yoyo.org, about 3,500 domains) that the app downloads and refreshes weekly. Empty ad slots are hidden. You can turn it off under Settings → *Block ads*. |
 | **Deep links** | Links to xbdeals, psdeals or ntdeals can be opened with the app. |
 | **Sign out** | Settings → *Sign out of all sites* clears cookies and site data. Your watchlist is kept. |
 
@@ -37,7 +39,9 @@ Requires Android Studio (Ladybug or newer) or JDK 17 with the Android SDK.
 - **Kotlin + Jetpack Compose (Material 3)**, min Android 8.0 (API 26).
 - `BrowserState`: one persistent `WebView` per site. Cookies are handled by `CookieManager`, and the `; wv` marker is removed from the user agent so social sign-in pages are less likely to refuse the embedded browser.
 - `PriceParser` / `PriceScripts`: read the price from schema.org JSON-LD first, then from microdata or OpenGraph tags, then from the first non-struck-through element whose class contains "price". The same logic runs as JavaScript inside the WebView and as Jsoup in the background worker.
-- `AdBlocker` returns empty responses for Google ad hosts from `shouldInterceptRequest` and injects CSS that hides leftover ad slots.
+- `PriceScripts.SITE_BRIDGE` notices the sites' own `/user/add-to-watch-list` and `/user/add-to-wish-list` requests and passes the game to the app through a `@JavascriptInterface`. `SCAN_PAGE` reads the game cards (`.game-collection-item`) on a page for importing and auto-sync.
+- Game pages are stored under the sites' canonical URL (`https://psdeals.net/us-store/game/<id>`), so the same game is never added twice.
+- `AdBlocker` returns empty responses for ad hosts from `shouldInterceptRequest` and injects CSS that hides leftover ad slots.
 - `Room` stores the watchlist and `WorkManager` (`PriceCheckWorker`) runs the background checks. Background checks use OkHttp and send your WebView login cookies.
 
 ## Known limitations

@@ -1,5 +1,6 @@
 package com.gamedeals.watchlist.data
 
+import com.gamedeals.watchlist.price.GameCard
 import com.gamedeals.watchlist.price.PriceFormat
 import com.gamedeals.watchlist.price.PriceInfo
 import com.gamedeals.watchlist.price.UrlUtils
@@ -43,6 +44,52 @@ class WatchRepository(private val dao: WatchDao) {
                     lastChecked = if (price != null) now else null,
                 )
             )
+        }
+    }
+
+    /**
+     * Adds a game only if it isn't watched yet (used for syncing from the sites, so your own
+     * target price is never overwritten). Returns true if it was added.
+     */
+    suspend fun addIfMissing(url: String, store: Store, title: String, info: PriceInfo?): Boolean {
+        val normalized = UrlUtils.normalize(url)
+        if (dao.findByUrl(normalized) != null) return false
+        val price = info?.price
+        val id = dao.insert(
+            WatchItem(
+                url = normalized,
+                store = store,
+                title = title,
+                imageUrl = info?.imageUrl,
+                currentPrice = price,
+                priceText = if (price != null) info?.priceText else null,
+                currency = info?.currency ?: PriceFormat.symbolFrom(info?.priceText),
+                lowestPrice = price,
+                lastChecked = if (price != null) System.currentTimeMillis() else null,
+            )
+        )
+        return id > 0
+    }
+
+    /** Adds every card that isn't watched yet; returns how many were added. */
+    suspend fun importCards(defaultStore: Store, cards: List<GameCard>): Int =
+        cards.count { card ->
+            addIfMissing(card.url, Store.fromUrl(card.url) ?: defaultStore, card.title, card.info)
+        }
+
+    /** Re-keys items saved by older versions (slug URLs) to the canonical game URL. */
+    suspend fun migrateUrls() {
+        val seen = mutableSetOf<String>()
+        for (item in dao.getAll().sortedBy { it.addedAt }) {
+            val canonical = UrlUtils.normalize(item.url)
+            when {
+                canonical in seen -> dao.delete(item) // duplicate of an earlier entry
+                canonical != item.url -> {
+                    seen += canonical
+                    runCatching { dao.update(item.copy(url = canonical)) }.onFailure { dao.delete(item) }
+                }
+                else -> seen += canonical
+            }
         }
     }
 

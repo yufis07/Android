@@ -9,7 +9,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -22,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -30,6 +35,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.gamedeals.watchlist.data.Prefs
 import com.gamedeals.watchlist.data.WatchItem
+import com.gamedeals.watchlist.price.GameCard
 import com.gamedeals.watchlist.price.PriceFormat
 import com.gamedeals.watchlist.price.PriceParser
 import com.gamedeals.watchlist.price.UrlUtils
@@ -146,6 +152,8 @@ fun SettingsDialog(
     currentInterval: Int,
     blockAds: Boolean,
     onBlockAdsChange: (Boolean) -> Unit,
+    autoSync: Boolean,
+    onAutoSyncChange: (Boolean) -> Unit,
     onDismiss: () -> Unit,
     onIntervalChange: (Int) -> Unit,
     onRunBackgroundCheck: () -> Unit,
@@ -153,6 +161,7 @@ fun SettingsDialog(
 ) {
     var selected by remember { mutableIntStateOf(currentInterval) }
     var adsBlocked by remember { mutableStateOf(blockAds) }
+    var syncing by remember { mutableStateOf(autoSync) }
     var confirmSignOut by remember { mutableStateOf(false) }
 
     AlertDialog(
@@ -186,9 +195,10 @@ fun SettingsDialog(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("Block Google ads", style = MaterialTheme.typography.titleSmall)
+                        Text("Block ads", style = MaterialTheme.typography.titleSmall)
                         Text(
-                            "AdMob / AdSense / DoubleClick in the site tabs · ${AdBlocker.blocked} blocked this session",
+                            "Google (AdMob, AdSense, DoubleClick) and other ad networks · " +
+                                "${AdBlocker.listSize} ad domains · ${AdBlocker.blocked} blocked this session",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -198,6 +208,30 @@ fun SettingsDialog(
                         onCheckedChange = {
                             adsBlocked = it
                             onBlockAdsChange(it)
+                        },
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Sync site watchlists", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "Games you add with a site's own Watchlist / Wishlist button, or that show as " +
+                                "on your lists while you browse, are added here automatically",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = syncing,
+                        onCheckedChange = {
+                            syncing = it
+                            onAutoSyncChange(it)
                         },
                     )
                 }
@@ -238,4 +272,72 @@ fun SettingsDialog(
             dismissButton = { TextButton(onClick = { confirmSignOut = false }) { Text("Cancel") } },
         )
     }
+}
+
+@Composable
+fun ImportGamesDialog(
+    cards: List<GameCard>,
+    alreadyWatched: Set<String>,
+    onDismiss: () -> Unit,
+    onImport: (List<GameCard>) -> Unit,
+) {
+    val newCards = remember(cards) { cards.filter { UrlUtils.normalize(it.url) !in alreadyWatched } }
+    // Pre-select games that are on your site watchlist/wishlist; if none are marked, select all.
+    val selected = remember(newCards) {
+        val marked = newCards.filter { it.onSiteList }
+        mutableStateListOf<GameCard>().apply { addAll(marked.ifEmpty { newCards }) }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Import games") },
+        text = {
+            Column {
+                Text(
+                    if (newCards.isEmpty()) "All ${cards.size} games on this page are already in your watchlist."
+                    else "${newCards.size} new game${if (newCards.size == 1) "" else "s"} found on this page" +
+                        if (cards.size > newCards.size) " (${cards.size - newCards.size} already watched)" else "",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                if (newCards.isNotEmpty()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { selected.clear(); selected.addAll(newCards) }) { Text("Select all") }
+                        TextButton(onClick = { selected.clear() }) { Text("Select none") }
+                    }
+                    LazyColumn(Modifier.heightIn(max = 360.dp)) {
+                        items(newCards, key = { it.url }) { card ->
+                            val checked = card in selected
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .selectable(selected = checked, onClick = {
+                                        if (checked) selected.remove(card) else selected.add(card)
+                                    }),
+                            ) {
+                                Checkbox(checked = checked, onCheckedChange = null)
+                                Spacer(Modifier.width(8.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(card.title, style = MaterialTheme.typography.bodyMedium, maxLines = 2)
+                                    val price = card.info.priceText ?: "price unknown"
+                                    Text(
+                                        if (card.onSiteList) "$price · on your site list" else price,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = selected.isNotEmpty(),
+                onClick = { onImport(selected.toList()) },
+            ) { Text("Import ${selected.size}") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
