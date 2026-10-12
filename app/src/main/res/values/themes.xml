@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.GameDeals" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">#FF1E1B2E</item>
+        <item name="android:navigationBarColor">#FF1E1B2E</item>
+        <item name="android:windowBackground">@android:color/white</item>
+    </style>
+</resources>
