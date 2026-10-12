@@ -19,6 +19,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -46,6 +47,7 @@ fun AppRoot(activity: MainActivity) {
     val scope = rememberCoroutineScope()
     var tab by rememberSaveable { mutableIntStateOf(WATCHLIST_TAB) }
     var intervalHours by remember { mutableIntStateOf(Prefs.intervalHours(activity)) }
+    var blockAds by remember { mutableStateOf(Prefs.blockAds(activity)) }
 
     // Notification taps and shared links ask us to open a specific page.
     val pending = activity.pendingOpenUrl
@@ -108,6 +110,12 @@ fun AppRoot(activity: MainActivity) {
                     watchItems = watchItems,
                     refreshProgress = activity.refreshProgress,
                     intervalHours = intervalHours,
+                    blockAds = blockAds,
+                    onBlockAdsChange = { enabled ->
+                        blockAds = enabled
+                        Prefs.setBlockAds(activity, enabled)
+                        activity.reloadBrowsers()
+                    },
                     onOpen = { item ->
                         tab = item.store.ordinal
                         activity.browser(item.store).webView.loadUrl(item.url)

@@ -12,6 +12,7 @@ An Android app for **xbdeals.net**, **psdeals.net** and **ntdeals.net** in one p
 | **Unified watchlist** | Every watched game from all three stores in one list. Each entry shows the current price, your target and the lowest price seen. You can filter by store and sort by recent, closest to target or price. Tap an entry to open it. You can edit or delete entries, and undo a delete. |
 | **Price alerts** | Background checks run every 6, 12 or 24 hours (or never). You get a notification when a game reaches your target and when its price drops. Tapping the notification opens the game. |
 | **Check now** | The ↻ button re-checks every game with an off-screen browser, which gets past bot checks the same way your normal browsing does. Visiting a watched game's page also updates its saved price automatically. |
+| **Google ad blocking** | Requests to Google's ad network (AdMob, AdSense, Ad Manager/DoubleClick, ad-blocker-detection messages) are blocked inside the site tabs, and empty ad slots are hidden. You can turn it off under Settings → *Block Google ads*. |
 | **Deep links** | Links to xbdeals, psdeals or ntdeals can be opened with the app. |
 | **Sign out** | Settings → *Sign out of all sites* clears cookies and site data. Your watchlist is kept. |
 
@@ -36,6 +37,7 @@ Requires Android Studio (Ladybug or newer) or JDK 17 with the Android SDK.
 - **Kotlin + Jetpack Compose (Material 3)**, min Android 8.0 (API 26).
 - `BrowserState`: one persistent `WebView` per site. Cookies are handled by `CookieManager`, and the `; wv` marker is removed from the user agent so social sign-in pages are less likely to refuse the embedded browser.
 - `PriceParser` / `PriceScripts`: read the price from schema.org JSON-LD first, then from microdata or OpenGraph tags, then from the first non-struck-through element whose class contains "price". The same logic runs as JavaScript inside the WebView and as Jsoup in the background worker.
+- `AdBlocker` returns empty responses for Google ad hosts from `shouldInterceptRequest` and injects CSS that hides leftover ad slots.
 - `Room` stores the watchlist and `WorkManager` (`PriceCheckWorker`) runs the background checks. Background checks use OkHttp and send your WebView login cookies.
 
 ## Known limitations

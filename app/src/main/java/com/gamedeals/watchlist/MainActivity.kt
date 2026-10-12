@@ -117,6 +117,11 @@ class MainActivity : ComponentActivity() {
         Toast.makeText(this, "Signed out of all sites", Toast.LENGTH_SHORT).show()
     }
 
+    /** Reloads any open site tabs, e.g. after toggling the ad blocker. */
+    fun reloadBrowsers() {
+        browsers.values.forEach { it.webView.reload() }
+    }
+
     override fun onPause() {
         super.onPause()
         CookieManager.getInstance().flush()

@@ -66,6 +66,8 @@ fun WatchlistScreen(
     watchItems: List<WatchItem>,
     refreshProgress: Pair<Int, Int>?,
     intervalHours: Int,
+    blockAds: Boolean,
+    onBlockAdsChange: (Boolean) -> Unit,
     onOpen: (WatchItem) -> Unit,
     onRefreshAll: () -> Unit,
     onUpdate: (WatchItem) -> Unit,
@@ -222,6 +224,8 @@ fun WatchlistScreen(
     if (showSettings) {
         SettingsDialog(
             currentInterval = intervalHours,
+            blockAds = blockAds,
+            onBlockAdsChange = onBlockAdsChange,
             onDismiss = { showSettings = false },
             onIntervalChange = onIntervalChange,
             onRunBackgroundCheck = {

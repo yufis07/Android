@@ -7,13 +7,16 @@ import android.graphics.Bitmap
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.gamedeals.watchlist.data.Prefs
 import com.gamedeals.watchlist.data.Store
+import com.gamedeals.watchlist.web.AdBlocker
 
 /**
  * One long-lived WebView per deal site, so each site keeps its own page, scroll
@@ -71,6 +74,13 @@ class BrowserState private constructor(val store: Store) {
                     return true
                 }
 
+                override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
+                    AdBlocker.intercept(request, Prefs.blockAds(activity))
+
+                override fun onPageCommitVisible(view: WebView, url: String?) {
+                    if (Prefs.blockAds(activity)) view.evaluateJavascript(AdBlocker.HIDE_ADS_SCRIPT, null)
+                }
+
                 override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
                     state.loading = true
                     url?.let { state.url = it }
@@ -80,6 +90,7 @@ class BrowserState private constructor(val store: Store) {
                     state.loading = false
                     state.syncNav(view)
                     CookieManager.getInstance().flush()
+                    if (Prefs.blockAds(activity)) view.evaluateJavascript(AdBlocker.HIDE_ADS_SCRIPT, null)
                     if (url != null) {
                         state.url = url
                         onPageLoaded(url, view)

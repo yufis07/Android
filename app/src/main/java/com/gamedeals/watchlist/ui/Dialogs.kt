@@ -15,6 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -32,6 +33,7 @@ import com.gamedeals.watchlist.data.WatchItem
 import com.gamedeals.watchlist.price.PriceFormat
 import com.gamedeals.watchlist.price.PriceParser
 import com.gamedeals.watchlist.price.UrlUtils
+import com.gamedeals.watchlist.web.AdBlocker
 
 private fun priceFilter(input: String) = input.filter { it.isDigit() || it == '.' || it == ',' }
 
@@ -142,12 +144,15 @@ fun EditWatchDialog(
 @Composable
 fun SettingsDialog(
     currentInterval: Int,
+    blockAds: Boolean,
+    onBlockAdsChange: (Boolean) -> Unit,
     onDismiss: () -> Unit,
     onIntervalChange: (Int) -> Unit,
     onRunBackgroundCheck: () -> Unit,
     onSignOut: () -> Unit,
 ) {
     var selected by remember { mutableIntStateOf(currentInterval) }
+    var adsBlocked by remember { mutableStateOf(blockAds) }
     var confirmSignOut by remember { mutableStateOf(false) }
 
     AlertDialog(
@@ -172,6 +177,29 @@ fun SettingsDialog(
                 Spacer(Modifier.height(8.dp))
                 OutlinedButton(onClick = onRunBackgroundCheck, modifier = Modifier.fillMaxWidth()) {
                     Text("Run background check now")
+                }
+                Spacer(Modifier.height(12.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Block Google ads", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "AdMob / AdSense / DoubleClick in the site tabs · ${AdBlocker.blocked} blocked this session",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = adsBlocked,
+                        onCheckedChange = {
+                            adsBlocked = it
+                            onBlockAdsChange(it)
+                        },
+                    )
                 }
                 Spacer(Modifier.height(12.dp))
                 HorizontalDivider()

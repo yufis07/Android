@@ -2,9 +2,12 @@ package com.gamedeals.watchlist.work
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import com.gamedeals.watchlist.data.WatchItem
+import com.gamedeals.watchlist.web.AdBlocker
 import com.gamedeals.watchlist.price.PriceInfo
 import com.gamedeals.watchlist.price.PriceParser
 import com.gamedeals.watchlist.price.PriceScripts
@@ -48,6 +51,10 @@ class WebViewPriceRefresher(private val context: Context) {
     private suspend fun load(webView: WebView, url: String): PriceInfo? =
         suspendCancellableCoroutine { cont ->
             webView.webViewClient = object : WebViewClient() {
+                // Ads are never needed for reading a price; skipping them makes checks faster.
+                override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
+                    AdBlocker.intercept(request, enabled = true)
+
                 override fun onPageFinished(view: WebView, finishedUrl: String?) {
                     // Give client-side rendering a moment, then read the price. If a bot check or
                     // redirect page loaded instead, wait for the next onPageFinished (or the timeout).
