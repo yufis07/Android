@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
@@ -40,6 +42,7 @@ import com.gamedeals.watchlist.price.PriceFormat
 import com.gamedeals.watchlist.price.PriceParser
 import com.gamedeals.watchlist.price.UrlUtils
 import com.gamedeals.watchlist.web.AdBlocker
+import com.gamedeals.watchlist.web.LiteMode
 
 private fun priceFilter(input: String) = input.filter { it.isDigit() || it == '.' || it == ',' }
 
@@ -154,6 +157,10 @@ fun SettingsDialog(
     onBlockAdsChange: (Boolean) -> Unit,
     autoSync: Boolean,
     onAutoSyncChange: (Boolean) -> Unit,
+    liteMode: Boolean,
+    onLiteModeChange: (Boolean) -> Unit,
+    onExport: () -> Unit,
+    onImport: () -> Unit,
     onDismiss: () -> Unit,
     onIntervalChange: (Int) -> Unit,
     onRunBackgroundCheck: () -> Unit,
@@ -162,13 +169,14 @@ fun SettingsDialog(
     var selected by remember { mutableIntStateOf(currentInterval) }
     var adsBlocked by remember { mutableStateOf(blockAds) }
     var syncing by remember { mutableStateOf(autoSync) }
+    var lite by remember { mutableStateOf(liteMode) }
     var confirmSignOut by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Settings") },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text("Background price checks", style = MaterialTheme.typography.titleSmall)
                 Spacer(Modifier.height(4.dp))
                 Prefs.INTERVAL_OPTIONS.forEach { hours ->
@@ -195,7 +203,7 @@ fun SettingsDialog(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("Block ads", style = MaterialTheme.typography.titleSmall)
+                        Text("Block ads & trackers", style = MaterialTheme.typography.titleSmall)
                         Text(
                             "Google (AdMob, AdSense, DoubleClick) and other ad networks · " +
                                 "${AdBlocker.listSize} ad domains · ${AdBlocker.blocked} blocked this session",
@@ -234,6 +242,44 @@ fun SettingsDialog(
                             onAutoSyncChange(it)
                         },
                     )
+                }
+                Spacer(Modifier.height(12.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Lite mode", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "Faster, lighter pages: skips web fonts, videos and audio in the site tabs · " +
+                                "${LiteMode.skipped} skipped this session",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = lite,
+                        onCheckedChange = {
+                            lite = it
+                            onLiteModeChange(it)
+                        },
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(12.dp))
+                Text("Backup", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Save your watchlist to a file, or restore it after reinstalling or on a new phone.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = onExport, modifier = Modifier.weight(1f)) { Text("Export") }
+                    OutlinedButton(onClick = onImport, modifier = Modifier.weight(1f)) { Text("Import") }
                 }
                 Spacer(Modifier.height(12.dp))
                 HorizontalDivider()

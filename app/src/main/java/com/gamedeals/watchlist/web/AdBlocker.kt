@@ -62,6 +62,13 @@ object AdBlocker {
         "an.yandex.ru", "mc.yandex.ru", "ads.yahoo.com", "advertising.com",
         "gemini.yahoo.com", "adtech.de", "zedo.com", "adblade.com", "buysellads.com",
         "carbonads.com", "carbonads.net",
+        // Analytics / session-recording trackers (slow pages down, add nothing for you)
+        "static.cloudflareinsights.com", "cloudflareinsights.com", "hotjar.com", "hotjar.io",
+        "clarity.ms", "mixpanel.com", "amplitude.com", "segment.io", "segment.com", "cdn.segment.com",
+        "nr-data.net", "js-agent.newrelic.com", "fullstory.com", "mouseflow.com", "crazyegg.com",
+        "luckyorange.com", "heap.io", "heapanalytics.com", "chartbeat.com", "chartbeat.net",
+        "parsely.com", "branch.io", "adjust.com", "appsflyer.com", "kochava.com",
+        "onesignal.com", "pushwoosh.com",
     )
 
     /** adservice.google.com, adservice.google.co.uk, … */

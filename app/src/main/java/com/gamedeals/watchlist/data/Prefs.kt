@@ -7,6 +7,8 @@ object Prefs {
     private const val KEY_INTERVAL = "check_interval_hours"
     private const val KEY_BLOCK_ADS = "block_ads"
     private const val KEY_AUTO_SYNC = "auto_sync_site_lists"
+    private const val KEY_LITE_MODE = "lite_mode"
+    private const val KEY_URLS_MIGRATED = "urls_migrated_v2"
     const val DEFAULT_INTERVAL_HOURS = 12
     val INTERVAL_OPTIONS = listOf(0, 6, 12, 24)
 
@@ -33,5 +35,22 @@ object Prefs {
     fun setAutoSync(context: Context, enabled: Boolean) {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .edit().putBoolean(KEY_AUTO_SYNC, enabled).apply()
+    }
+
+    /** Lite mode: skip web fonts, videos and audio in the site tabs. */
+    fun liteMode(context: Context): Boolean =
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getBoolean(KEY_LITE_MODE, true)
+
+    fun setLiteMode(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_LITE_MODE, enabled).apply()
+    }
+
+    fun urlsMigrated(context: Context): Boolean =
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getBoolean(KEY_URLS_MIGRATED, false)
+
+    fun setUrlsMigrated(context: Context) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_URLS_MIGRATED, true).apply()
     }
 }

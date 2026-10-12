@@ -21,6 +21,7 @@ import com.gamedeals.watchlist.price.PriceParser
 import com.gamedeals.watchlist.price.PriceScripts
 import com.gamedeals.watchlist.price.SiteListAdd
 import com.gamedeals.watchlist.web.AdBlocker
+import com.gamedeals.watchlist.web.LiteMode
 
 /** Events from the site tabs that the activity reacts to. */
 interface BrowserCallbacks {
@@ -103,6 +104,7 @@ class BrowserState private constructor(val store: Store) {
 
                 override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
                     AdBlocker.intercept(request, Prefs.blockAds(activity))
+                        ?: LiteMode.intercept(request, Prefs.liteMode(activity))
 
                 override fun onPageCommitVisible(view: WebView, url: String?) {
                     view.evaluateJavascript(PriceScripts.SITE_BRIDGE, null)

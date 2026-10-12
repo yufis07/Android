@@ -1,6 +1,7 @@
 package com.gamedeals.watchlist.ui
 
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
@@ -27,6 +28,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,6 +53,8 @@ data class AddDraft(val url: String, val store: Store, val title: String, val in
 @Composable
 fun BrowserScreen(
     state: BrowserState,
+    container: FrameLayout,
+    visible: Boolean,
     watchItems: List<WatchItem>,
     onSave: (draft: AddDraft, title: String, target: Double?) -> Unit,
     onScanPage: suspend () -> List<GameCard>,
@@ -65,7 +69,14 @@ fun BrowserScreen(
     val currentKey = UrlUtils.normalize(state.url)
     val existing = watchItems.firstOrNull { it.url == currentKey }
 
-    BackHandler(enabled = state.canGoBack) { state.webView.goBack() }
+    // This screen is reused for all sites and kept while hidden; close any open menu/dialog on switch.
+    LaunchedEffect(state.store, visible) {
+        draft = null
+        importCards = null
+        menuOpen = false
+    }
+
+    BackHandler(enabled = visible && state.canGoBack) { state.webView.goBack() }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
@@ -161,7 +172,7 @@ fun BrowserScreen(
             }
             AndroidView(
                 factory = {
-                    state.webView.also { (it.parent as? ViewGroup)?.removeView(it) }
+                    container.also { (it.parent as? ViewGroup)?.removeView(it) }
                 },
                 modifier = Modifier.fillMaxSize(),
             )

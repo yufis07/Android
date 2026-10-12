@@ -93,6 +93,15 @@ class WatchRepository(private val dao: WatchDao) {
         }
     }
 
+    suspend fun allItems(): List<WatchItem> = dao.getAll()
+
+    /** Adds backed-up items that aren't watched yet; returns how many were added. */
+    suspend fun importBackup(items: List<WatchItem>): Int =
+        items.count { item ->
+            val url = UrlUtils.normalize(item.url)
+            dao.findByUrl(url) == null && dao.insert(item.copy(id = 0, url = url)) > 0
+        }
+
     suspend fun update(item: WatchItem) = dao.update(item)
 
     suspend fun delete(item: WatchItem) = dao.delete(item)

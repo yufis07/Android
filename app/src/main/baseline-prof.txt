@@ -1,0 +1,4 @@
+# Pre-compile the app's own code (startup, watchlist list, site tabs) ahead of time.
+# Compose and other AndroidX libraries ship their own profiles, which are merged in.
+HSPLcom/gamedeals/watchlist/**->**(**)**
+Lcom/gamedeals/watchlist/**;

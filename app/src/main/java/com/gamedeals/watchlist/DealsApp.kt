@@ -18,6 +18,11 @@ class DealsApp : Application() {
         PriceCheckScheduler.schedule(this, Prefs.intervalHours(this), replace = false)
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         scope.launch { AdBlocker.init(this@DealsApp) }
-        scope.launch { WatchRepository(AppDatabase.get(this@DealsApp).watchDao()).migrateUrls() }
+        if (!Prefs.urlsMigrated(this)) {
+            scope.launch {
+                WatchRepository(AppDatabase.get(this@DealsApp).watchDao()).migrateUrls()
+                Prefs.setUrlsMigrated(this@DealsApp)
+            }
+        }
     }
 }

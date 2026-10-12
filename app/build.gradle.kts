@@ -5,6 +5,12 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+// Optional release signing with your own key. Nothing secret is stored in the repo: CI decodes
+// the keystore from the SIGNING_KEYSTORE_BASE64 secret into a temp file and passes its path and
+// password via environment variables. Without them, release builds use the debug key.
+val signingKeystore: String? = System.getenv("SIGNING_KEYSTORE_FILE")?.takeIf { it.isNotBlank() && file(it).exists() }
+val signingPassword: String? = System.getenv("SIGNING_PASSWORD")?.takeIf { it.isNotBlank() }
+
 android {
     namespace = "com.gamedeals.watchlist"
     compileSdk = 35
@@ -13,14 +19,29 @@ android {
         applicationId = "com.gamedeals.watchlist"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
+    }
+
+    signingConfigs {
+        if (signingKeystore != null && signingPassword != null) {
+            create("release") {
+                storeFile = file(signingKeystore)
+                storeType = "pkcs12"
+                storePassword = signingPassword
+                keyAlias = System.getenv("SIGNING_KEY_ALIAS") ?: "gamedeals"
+                keyPassword = signingPassword
+            }
+        }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8: strips unused code/resources and optimizes -> smaller, faster APK
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
 
@@ -54,6 +75,8 @@ dependencies {
     ksp("androidx.room:room-compiler:2.6.1")
 
     implementation("androidx.work:work-runtime-ktx:2.10.0")
+    // Installs the bundled baseline profiles (ours + Compose's) on sideloaded installs for faster startup/scrolling
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jsoup:jsoup:1.18.3")
 

@@ -1,13 +1,18 @@
 package com.gamedeals.watchlist
 
 import android.Manifest
+import android.content.ComponentCallbacks2
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.net.Uri
 import android.os.Bundle
+import android.view.View
+import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.WebStorage
 import android.webkit.WebView
+import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -18,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.gamedeals.watchlist.data.AppDatabase
+import com.gamedeals.watchlist.data.Backup
 import com.gamedeals.watchlist.data.Prefs
 import com.gamedeals.watchlist.data.WatchRepository
 import com.gamedeals.watchlist.data.Store
@@ -33,12 +39,25 @@ import com.gamedeals.watchlist.ui.BrowserState
 import com.gamedeals.watchlist.ui.DealsTheme
 import com.gamedeals.watchlist.web.evaluate
 import com.gamedeals.watchlist.work.WebViewPriceRefresher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity(), BrowserCallbacks {
 
     private val browsers = mutableMapOf<Store, BrowserState>()
+
+    /**
+     * Holds every site tab's WebView. It stays attached while you switch tabs; switching only
+     * changes which child is visible, so pages never reload or redraw from scratch.
+     */
+    val browserContainer: FrameLayout by lazy { FrameLayout(this) }
+
+    /** The site tab currently (or most recently) shown. */
+    var activeStore: Store? = null
+        private set
+    private var browsersVisible = false
     private val repo by lazy { WatchRepository(AppDatabase.get(this).watchDao()) }
 
     /** A URL (from a notification or shared link) the UI should open. */
@@ -47,6 +66,15 @@ class MainActivity : ComponentActivity(), BrowserCallbacks {
     /** (index, total) while "check all prices" is running, null otherwise. */
     var refreshProgress by mutableStateOf<Pair<Int, Int>?>(null)
         private set
+
+    private val exportLauncher =
+        registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+            if (uri != null) lifecycleScope.launch { exportTo(uri) }
+        }
+    private val importLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri != null) lifecycleScope.launch { importFrom(uri) }
+        }
 
     private val notificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
@@ -74,7 +102,33 @@ class MainActivity : ComponentActivity(), BrowserCallbacks {
 
     /** Returns (creating on first use) the WebView-backed browser for [store]. */
     fun browser(store: Store): BrowserState =
-        browsers.getOrPut(store) { BrowserState.create(this, store, this) }
+        browsers.getOrPut(store) {
+            BrowserState.create(this, store, this).also { state ->
+                state.webView.visibility = View.INVISIBLE
+                browserContainer.addView(
+                    state.webView,
+                    FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
+                )
+            }
+        }
+
+    /**
+     * Shows [store]'s tab (or hides all site tabs when null, e.g. on the Watchlist screen).
+     * Hidden tabs are paused so they don't use CPU or battery in the background.
+     */
+    fun showBrowser(store: Store?) {
+        if (store != null) {
+            browser(store)
+            activeStore = store
+        }
+        browsersVisible = store != null
+        browsers.forEach { (s, state) ->
+            val visible = s == store
+            state.webView.visibility = if (visible) View.VISIBLE else View.INVISIBLE
+            state.webView.settings.offscreenPreRaster = visible // smoother scrolling for the visible tab
+            if (visible) state.webView.onResume() else state.webView.onPause()
+        }
+    }
 
     /**
      * After each page load:
@@ -82,14 +136,18 @@ class MainActivity : ComponentActivity(), BrowserCallbacks {
      *  - if auto-sync is on, add any games marked as on your site watchlist / wishlist.
      */
     override fun onPageLoaded(url: String, view: WebView) {
+        val isGame = UrlUtils.isGamePage(url)
+        if (!isGame && !Prefs.autoSync(this)) return // nothing to do on this page
         lifecycleScope.launch {
+            val item = if (isGame) AppDatabase.get(this@MainActivity).watchDao().findByUrl(UrlUtils.normalize(url)) else null
+            if (item == null && isGame) return@launch
             delay(1_200) // let the page finish rendering prices and list icons
-            val item = AppDatabase.get(this@MainActivity).watchDao().findByUrl(UrlUtils.normalize(url))
             if (item != null) {
                 val info = PriceParser.fromJsResult(view.evaluate(PriceScripts.EXTRACT))
                 if (info?.price != null) PriceUpdater.apply(this@MainActivity, item.id, info, notify = false)
             }
-            if (Prefs.autoSync(this@MainActivity)) {
+            // Game pages only show related games, so list syncing runs on list pages only.
+            if (Prefs.autoSync(this@MainActivity) && !UrlUtils.isGamePage(url)) {
                 val store = Store.fromUrl(url) ?: return@launch
                 val onSiteLists = scanPage(view).filter { it.onSiteList }
                 if (onSiteLists.isEmpty()) return@launch
@@ -127,6 +185,30 @@ class MainActivity : ComponentActivity(), BrowserCallbacks {
         PriceParser.cardsFromJsResult(view.evaluate(PriceScripts.SCAN_PAGE))
 
     suspend fun importCards(store: Store, cards: List<GameCard>): Int = repo.importCards(store, cards)
+
+    fun exportWatchlist() = exportLauncher.launch("game-deals-watchlist.json")
+
+    fun importWatchlist() = importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream"))
+
+    private suspend fun exportTo(uri: Uri) {
+        val result = runCatching {
+            val json = Backup.toJson(repo.allItems())
+            withContext(Dispatchers.IO) {
+                contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) } ?: error("Can't write file")
+            }
+        }
+        toast(result.fold({ "Watchlist exported" }, { "Export failed: ${it.message}" }))
+    }
+
+    private suspend fun importFrom(uri: Uri) {
+        val result = runCatching {
+            val text = withContext(Dispatchers.IO) {
+                contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() } ?: error("Can't read file")
+            }
+            repo.importBackup(Backup.fromJson(text))
+        }
+        toast(result.fold({ "Imported $it game${if (it == 1) "" else "s"}" }, { "Import failed: not a watchlist backup" }))
+    }
 
     fun toast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
@@ -175,6 +257,27 @@ class MainActivity : ComponentActivity(), BrowserCallbacks {
     override fun onPause() {
         super.onPause()
         CookieManager.getInstance().flush()
+        browsers.values.forEach { it.webView.onPause() }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (browsersVisible) activeStore?.let { browsers[it]?.webView?.onResume() }
+    }
+
+    /** Frees memory used by site tabs you aren't looking at when Android asks for it. */
+    @Suppress("DEPRECATION")
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+            val unused = browsers.keys.filter { it != activeStore }
+            unused.forEach { store ->
+                browsers.remove(store)?.webView?.let { webView ->
+                    browserContainer.removeView(webView)
+                    webView.destroy()
+                }
+            }
+        }
     }
 
     override fun onDestroy() {

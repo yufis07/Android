@@ -11,3 +11,5 @@ build/
 *.aab
 *.jks
 *.keystore
+/signing/
+*.p12
