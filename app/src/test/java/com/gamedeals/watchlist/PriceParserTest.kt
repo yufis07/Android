@@ -176,4 +176,21 @@ class PriceParserTest {
         assertEquals(39.99, add.info.price!!, 0.001)
         assertNull(PriceParser.siteAddFromJson("""{"list":"watchlist"}"""))
     }
+
+    @Test
+    fun parsesScanWithNextPageAndStructuredPrices() {
+        val js = org.json.JSONObject.quote(
+            """{"cards":[{"id":"3232736","url":"https://psdeals.net/us-store/game/3232736/marvels-wolverine",""" +
+                """"title":"Marvel’s Wolverine","price":"69.99","currency":"USD","priceText":"${'$'}69.99",""" +
+                """"image":null,"watchlisted":false,"wishlisted":true}],""" +
+                """"next":"https://psdeals.net/us-store/collection/most_wanted/2"}"""
+        )
+        val scan = PriceParser.scanFromJsResult(js)
+        assertEquals(1, scan.cards.size)
+        assertEquals(69.99, scan.cards[0].info.price!!, 0.001)
+        assertEquals("USD", scan.cards[0].info.currency)
+        assertEquals(true, scan.cards[0].onSiteList)
+        assertEquals("https://psdeals.net/us-store/collection/most_wanted/2", scan.nextUrl)
+        assertEquals(0, PriceParser.scanFromJsResult("null").cards.size)
+    }
 }

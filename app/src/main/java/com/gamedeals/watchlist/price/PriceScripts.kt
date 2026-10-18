@@ -58,11 +58,11 @@ object PriceScripts {
     """.trimIndent()
 
     /**
-     * Lists every game card on the current page (search results, collections, or your own
-     * watchlist / wishlist pages on the site) for "Import games from this page".
+     * Shared in-page card reader (mirrors [SiteHtml.cards]): defines `gdwReadCards()` which
+     * returns every game card on the page with its id, link, title, price and list markers.
      */
-    val SCAN_PAGE = """
-        (function () {
+    private val CARD_READER = """
+        function gdwReadCards() {
           var seen = {}, out = [];
           function txt(el) { return el ? el.textContent.replace(/\s+/g, ' ').trim() : null; }
           function priceOf(c) {
@@ -70,6 +70,7 @@ object PriceScripts {
             if (p) return txt(p);
             var els = c.querySelectorAll('[class*="price"]');
             for (var i = 0; i < els.length; i++) {
+              if (els[i].hasAttribute('itemprop')) continue;
               var cls = els[i].getAttribute('class') || '';
               if (/old|original|strike|regular|base|full|history|crossed|lowest/i.test(cls)) continue;
               if (els[i].querySelector('[class*="price"]')) continue;
@@ -78,30 +79,52 @@ object PriceScripts {
             }
             return null;
           }
-          document.querySelectorAll('a[href*="/game/"]').forEach(function (a) {
+          var roots = document.querySelectorAll('.game-collection-item, .game-table-item');
+          var list = roots.length ? Array.prototype.slice.call(roots) :
+            Array.prototype.map.call(document.querySelectorAll('a[href*="/game/"]'), function (a) { return a.closest('li') || a; });
+          list.forEach(function (c) {
+            var a = (c.matches && c.matches('a[href*="/game/"]')) ? c : c.querySelector('a[href*="/game/"]');
+            if (!a) return;
             var m = a.href.match(/\/game\/(\d+)/);
-            if (!m || seen[m[1]]) return;
-            if (location.pathname.indexOf('/game/' + m[1]) >= 0) return; // the page's own game
-            var c = a.closest('.game-collection-item') || a.closest('[class*="game-table-item"]') ||
-                    a.closest('[class*="game-item"]') || a.closest('li') || a;
-            var title = txt(c.querySelector('[class*="item-details-title"], [class*="item-title"], [class*="title"]')) ||
+            var skuEl = c.querySelector('[itemprop="sku"]');
+            var id = (skuEl && txt(skuEl)) || (m && m[1]);
+            if (!id || seen[id]) return;
+            if (location.pathname.indexOf('/game/' + id) >= 0) return; // the page's own game
+            var title = txt(c.querySelector('[itemprop="name"]')) ||
+                        txt(c.querySelector('[class*="item-details-title"], [class*="item-title"], [class*="title"]')) ||
                         a.getAttribute('title') || txt(a);
             if (!title) return;
-            seen[m[1]] = true;
+            seen[id] = true;
+            var priceEl = c.querySelector('[itemprop="price"]');
+            var curEl = c.querySelector('[itemprop="priceCurrency"]');
             var img = c.querySelector('img[class*="item-image"], img[itemprop="image"], img:not([src*="flag"]):not([class*="flag"])');
             out.push({
-              id: m[1],
+              id: id,
               url: a.href.split('#')[0].split('?')[0],
               title: title,
+              price: priceEl ? (priceEl.getAttribute('content') || txt(priceEl)) : null,
+              currency: curEl ? (curEl.getAttribute('content') || txt(curEl)) : null,
               priceText: priceOf(c),
               image: img ? (img.getAttribute('data-src') || img.getAttribute('src')) : null,
               watchlisted: !!c.querySelector('.icon-watchlist.active'),
               wishlisted: !!c.querySelector('.icon-wishlist.active')
             });
           });
-          return JSON.stringify(out);
-        })();
+          return out;
+        }
+        function gdwNextPage() {
+          var l = document.querySelector('link[rel="next"][href]') ||
+                  document.querySelector('.pagination li.next:not(.disabled) a[href], .pagination a[rel="next"][href]');
+          return l ? l.href : null;
+        }
     """.trimIndent()
+
+    /**
+     * Lists every game card on the current page (search results, collections, or your own
+     * watchlist / wishlist pages on the site) for "Import games from this page", plus the
+     * link to the next page of the list.
+     */
+    val SCAN_PAGE = "(function () {\n" + CARD_READER + "\nreturn JSON.stringify({ cards: gdwReadCards(), next: gdwNextPage() });\n})();"
 
     /**
      * Installed on every deal-site page. When you use the site's own "Add to Watchlist" or
@@ -109,26 +132,23 @@ object PriceScripts {
      * `game_id`; we spot that request, look up the game's card and tell the app, so the game
      * is added to the app's watchlist too.
      */
-    val SITE_BRIDGE = """
+    val SITE_BRIDGE get() = BRIDGE_HEAD + "\n" + CARD_READER + "\n" + BRIDGE_BODY
+
+    private val BRIDGE_HEAD = """
         (function () {
           if (window.__gdwBridge || !window.GameDealsApp) return;
           window.__gdwBridge = true;
+    """.trimIndent()
+
+    private val BRIDGE_BODY = """
           function txt(el) { return el ? el.textContent.replace(/\s+/g, ' ').trim() : null; }
           function info(id, list) {
-            var r = { gameId: id, list: list, url: null, title: null, priceText: null, image: null, pageUrl: location.href };
-            function card(el) {
-              return el && (el.closest('.game-collection-item') || el.closest('[class*="game-table-item"]') || el.closest('[class*="game-item"]'));
-            }
-            var c = card(document.querySelector('[data-product-id="' + id + '"]')) ||
-                    card(document.querySelector('a[href*="/game/' + id + '/"], a[href$="/game/' + id + '"]'));
-            if (c) {
-              var a = c.querySelector('a[href*="/game/"]');
-              r.url = a ? a.href.split('#')[0] : null;
-              r.title = txt(c.querySelector('[class*="item-details-title"], [class*="item-title"], [class*="title"]'));
-              var p = c.querySelector('[class*="price-discount"]') || c.querySelector('[class*="price"]:not([class*="strike"]):not([class*="old"])');
-              r.priceText = txt(p);
-              var img = c.querySelector('img[class*="item-image"], img[itemprop="image"], img:not([src*="flag"]):not([class*="flag"])');
-              r.image = img ? (img.getAttribute('data-src') || img.getAttribute('src')) : null;
+            var r = { gameId: id, list: list, url: null, title: null, priceText: null, price: null,
+                      currency: null, image: null, pageUrl: location.href };
+            var found = gdwReadCards().filter(function (x) { return x.id === id; })[0];
+            if (found) {
+              r.url = found.url; r.title = found.title; r.priceText = found.priceText;
+              r.price = found.price; r.currency = found.currency; r.image = found.image;
             }
             if (!r.url && location.pathname.indexOf('/game/' + id) >= 0) r.url = location.href.split('#')[0];
             return r;
@@ -152,6 +172,26 @@ object PriceScripts {
               return f.apply(this, arguments);
             };
           }
+
+          // Live sync: whenever game cards appear or change (lazy loading, "load more", list
+          // markers filled in after the page loads), report games that are on your lists.
+          var syncOn = false, listPage = false;
+          try { syncOn = !!window.GameDealsApp.syncEnabled(); listPage = !!window.GameDealsApp.isListPage(location.href); } catch (e) {}
+          if (!syncOn) return;
+          var reported = {}, timer = null;
+          function syncScan() {
+            var cards = gdwReadCards();
+            var marked = cards.filter(function (c) { return c.watchlisted || c.wishlisted; });
+            var use = marked.length ? marked : (listPage ? cards : []);
+            var fresh = use.filter(function (c) { return !reported[c.id]; });
+            if (!fresh.length) return;
+            fresh.forEach(function (c) { reported[c.id] = true; c.watchlisted = c.watchlisted || (listPage && !c.wishlisted); });
+            try { window.GameDealsApp.onCardsFound(JSON.stringify(fresh)); } catch (e) {}
+          }
+          function schedule() { if (!timer) timer = setTimeout(function () { timer = null; syncScan(); }, 600); }
+          schedule();
+          new MutationObserver(schedule).observe(document.documentElement,
+            { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
         })();
     """.trimIndent()
 }

@@ -11,14 +11,24 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.gamedeals.watchlist.data.AppDatabase
+import com.gamedeals.watchlist.data.Prefs
 import com.gamedeals.watchlist.price.PriceUpdater
+import com.gamedeals.watchlist.sync.ListSyncRunner
 import kotlinx.coroutines.delay
 import java.util.concurrent.TimeUnit
 
 /** Periodically re-checks every watched game's price in the background. */
 class PriceCheckWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
+        // 1. Sync your site lists (fast: one request per 36 games). This also refreshes the
+        //    price of every watched game that is on those lists.
+        if (Prefs.autoSync(applicationContext)) {
+            runCatching { ListSyncRunner.run(applicationContext, allowWebView = false) }
+        }
+        // 2. Check the remaining games one by one.
+        val freshCutoff = System.currentTimeMillis() - 30 * 60 * 1000L
         val items = AppDatabase.get(applicationContext).watchDao().getAll()
+            .filter { (it.lastChecked ?: 0L) < freshCutoff || it.lastError != null }
         if (items.isEmpty()) return Result.success()
         val fetcher = HttpPriceFetcher(applicationContext)
         items.forEachIndexed { index, item ->

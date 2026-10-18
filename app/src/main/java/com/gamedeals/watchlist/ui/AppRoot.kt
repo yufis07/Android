@@ -119,7 +119,7 @@ fun AppRoot(activity: MainActivity) {
                                 activity.toast("“$title” saved to your watchlist")
                             }
                         },
-                        onScanPage = { activity.scanPage(activity.browser(store).webView) },
+                        onScanPage = { onProgress -> activity.scanAllPages(activity.browser(store).webView, onProgress) },
                         onImport = { cards ->
                             scope.launch {
                                 val added = activity.importCards(store, cards)
@@ -131,8 +131,15 @@ fun AppRoot(activity: MainActivity) {
                 }
             }
             if (tab == WATCHLIST_TAB) {
+                val syncVersion = activity.listSyncVersion
+                val lastSync = remember(syncVersion) { Prefs.lastListSync(activity) }
+                val syncSummary = remember(syncVersion) { Prefs.listSyncSummary(activity) }
                 WatchlistScreen(
                     watchItems = watchItems,
+                    listSyncStatus = activity.listSyncStatus,
+                    lastListSync = lastSync,
+                    listSyncSummary = syncSummary,
+                    onSyncLists = { activity.syncSiteLists(manual = true) },
                     refreshProgress = activity.refreshProgress,
                     intervalHours = intervalHours,
                     blockAds = blockAds,

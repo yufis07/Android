@@ -57,13 +57,14 @@ fun BrowserScreen(
     visible: Boolean,
     watchItems: List<WatchItem>,
     onSave: (draft: AddDraft, title: String, target: Double?) -> Unit,
-    onScanPage: suspend () -> List<GameCard>,
+    onScanPage: suspend (onProgress: (String) -> Unit) -> List<GameCard>,
     onImport: (List<GameCard>) -> Unit,
     onMessage: (String) -> Unit,
 ) {
     var draft by remember { mutableStateOf<AddDraft?>(null) }
     var menuOpen by remember { mutableStateOf(false) }
     var importCards by remember { mutableStateOf<List<GameCard>?>(null) }
+    var scanProgress by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val watchedUrls = watchItems.map { it.url }.toSet()
     val currentKey = UrlUtils.normalize(state.url)
@@ -74,6 +75,7 @@ fun BrowserScreen(
         draft = null
         importCards = null
         menuOpen = false
+        scanProgress = null
     }
 
     BackHandler(enabled = visible && state.canGoBack) { state.webView.goBack() }
@@ -118,8 +120,13 @@ fun BrowserScreen(
                             text = { Text("Import games from this page") },
                             onClick = {
                                 menuOpen = false
-                                scope.launch {
-                                    val cards = onScanPage()
+                                if (scanProgress == null) scope.launch {
+                                    scanProgress = "Reading games on this page…"
+                                    val cards = try {
+                                        onScanPage { progress -> scanProgress = progress }
+                                    } finally {
+                                        scanProgress = null
+                                    }
                                     if (cards.isEmpty()) {
                                         onMessage("No games found on this page")
                                     } else {
@@ -164,7 +171,15 @@ fun BrowserScreen(
                 .padding(padding)
                 .fillMaxSize()
         ) {
-            if (state.loading) {
+            scanProgress?.let { text ->
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                Text(
+                    text,
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                )
+            }
+            if (state.loading && scanProgress == null) {
                 LinearProgressIndicator(
                     progress = { state.progress / 100f },
                     modifier = Modifier.fillMaxWidth(),

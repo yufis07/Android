@@ -2,6 +2,7 @@ package com.gamedeals.watchlist.ui
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.webkit.CookieManager
@@ -17,9 +18,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.gamedeals.watchlist.data.Prefs
 import com.gamedeals.watchlist.data.Store
+import com.gamedeals.watchlist.price.GameCard
 import com.gamedeals.watchlist.price.PriceParser
 import com.gamedeals.watchlist.price.PriceScripts
 import com.gamedeals.watchlist.price.SiteListAdd
+import com.gamedeals.watchlist.price.UrlUtils
 import com.gamedeals.watchlist.web.AdBlocker
 import com.gamedeals.watchlist.web.LiteMode
 
@@ -29,13 +32,39 @@ interface BrowserCallbacks {
 
     /** You used the site's own "Add to Watchlist / Wishlist" button. */
     fun onSiteListAdd(add: SiteListAdd, view: WebView)
+
+    /** The live sync spotted games on your site lists on the current page. */
+    fun onCardsFound(cards: List<GameCard>, view: WebView)
 }
 
 /** Receives messages from [PriceScripts.SITE_BRIDGE] running in the page. */
 private class SiteBridge(
+    private val context: Context,
     private val view: WebView,
     private val callbacks: BrowserCallbacks,
 ) {
+    @JavascriptInterface
+    fun syncEnabled(): Boolean = Prefs.autoSync(context)
+
+    /** Your own Watchlist / Wishlist page (remembered from the full sync, or by its address). */
+    @JavascriptInterface
+    fun isListPage(url: String?): Boolean {
+        if (url.isNullOrBlank()) return false
+        val key = UrlUtils.normalize(url)
+        if (Prefs.allListUrls(context).any { UrlUtils.normalize(it) == key }) return true
+        val path = url.substringAfter("://").substringAfter('/', "")
+        return Regex("(?i)(watch|wish)[-_]?list").containsMatchIn(path) && "/game/" !in path
+    }
+
+    @JavascriptInterface
+    fun onCardsFound(json: String) {
+        val cards = PriceParser.cardsFromJsResult(json)
+        if (cards.isEmpty()) return
+        view.post {
+            if (Store.fromUrl(view.url) != null) callbacks.onCardsFound(cards, view)
+        }
+    }
+
     @JavascriptInterface
     fun onSiteListAdd(json: String) {
         val add = PriceParser.siteAddFromJson(json) ?: return
@@ -142,7 +171,7 @@ class BrowserState private constructor(val store: Store) {
                     if (!title.isNullOrBlank()) state.title = title
                 }
             }
-            webView.addJavascriptInterface(SiteBridge(webView, callbacks), "GameDealsApp")
+            webView.addJavascriptInterface(SiteBridge(activity, webView, callbacks), "GameDealsApp")
             state.webView = webView
             webView.loadUrl(store.homeUrl)
             return state

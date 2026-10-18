@@ -77,35 +77,44 @@ object PriceParser {
         }.getOrNull()
     }
 
-    /** Parses the JSON array returned by [PriceScripts.SCAN_PAGE]. */
-    fun cardsFromJsResult(result: String?): List<GameCard> {
-        if (result.isNullOrBlank() || result == "null") return emptyList()
+    /** Result of [PriceScripts.SCAN_PAGE]: the page's game cards and the next page of the list. */
+    data class ScanResult(val cards: List<GameCard>, val nextUrl: String?)
+
+    /** Parses [PriceScripts.SCAN_PAGE]'s result (or a bare card array from the live sync bridge). */
+    fun scanFromJsResult(result: String?): ScanResult {
+        if (result.isNullOrBlank() || result == "null") return ScanResult(emptyList(), null)
         return runCatching {
-            val decoded = JSONTokener(result).nextValue()
-            val arr = when (decoded) {
-                is String -> JSONArray(decoded)
-                is JSONArray -> decoded
-                else -> return emptyList()
+            var value = JSONTokener(result).nextValue()
+            if (value is String) value = JSONTokener(value).nextValue()
+            when (value) {
+                is JSONObject -> ScanResult(cardsFrom(value.optJSONArray("cards") ?: JSONArray()), value.str("next"))
+                is JSONArray -> ScanResult(cardsFrom(value), null)
+                else -> ScanResult(emptyList(), null)
             }
-            (0 until arr.length()).mapNotNull { i ->
-                val o = arr.optJSONObject(i) ?: return@mapNotNull null
-                val url = o.str("url") ?: return@mapNotNull null
-                val priceText = o.str("priceText")
-                GameCard(
-                    url = url,
-                    title = o.str("title") ?: return@mapNotNull null,
-                    info = PriceInfo(
-                        title = o.str("title"),
-                        price = parseNumber(priceText),
-                        priceText = priceText,
-                        currency = PriceFormat.symbolFrom(priceText),
-                        imageUrl = o.str("image"),
-                    ),
-                    onSiteList = o.optBoolean("watchlisted") || o.optBoolean("wishlisted"),
-                )
-            }
-        }.getOrDefault(emptyList())
+        }.getOrDefault(ScanResult(emptyList(), null))
     }
+
+    fun cardsFromJsResult(result: String?): List<GameCard> = scanFromJsResult(result).cards
+
+    private fun cardsFrom(arr: JSONArray): List<GameCard> =
+        (0 until arr.length()).mapNotNull { i ->
+            val o = arr.optJSONObject(i) ?: return@mapNotNull null
+            val url = o.str("url") ?: return@mapNotNull null
+            val title = o.str("title") ?: return@mapNotNull null
+            val priceText = o.str("priceText")
+            GameCard(
+                url = url,
+                title = title,
+                info = PriceInfo(
+                    title = title,
+                    price = parseNumber(o.str("price") ?: priceText),
+                    priceText = priceText,
+                    currency = o.str("currency") ?: PriceFormat.symbolFrom(priceText),
+                    imageUrl = o.str("image"),
+                ),
+                onSiteList = o.optBoolean("watchlisted") || o.optBoolean("wishlisted"),
+            )
+        }
 
     /** Parses the JSON sent by [PriceScripts.SITE_BRIDGE] when a site watchlist/wishlist button is used. */
     fun siteAddFromJson(json: String): SiteListAdd? = runCatching {
@@ -118,9 +127,9 @@ object PriceParser {
             pageUrl = o.str("pageUrl"),
             info = PriceInfo(
                 title = cleanTitle(o.str("title")),
-                price = parseNumber(priceText),
+                price = parseNumber(o.str("price") ?: priceText),
                 priceText = priceText,
-                currency = PriceFormat.symbolFrom(priceText),
+                currency = o.str("currency") ?: PriceFormat.symbolFrom(priceText),
                 imageUrl = o.str("image"),
             ),
         )

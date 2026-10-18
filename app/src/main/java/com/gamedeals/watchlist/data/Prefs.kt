@@ -9,6 +9,8 @@ object Prefs {
     private const val KEY_AUTO_SYNC = "auto_sync_site_lists"
     private const val KEY_LITE_MODE = "lite_mode"
     private const val KEY_URLS_MIGRATED = "urls_migrated_v2"
+    private const val KEY_LAST_LIST_SYNC = "last_list_sync"
+    private const val KEY_LIST_SYNC_SUMMARY = "list_sync_summary"
     const val DEFAULT_INTERVAL_HOURS = 12
     val INTERVAL_OPTIONS = listOf(0, 6, 12, 24)
 
@@ -52,5 +54,30 @@ object Prefs {
     fun setUrlsMigrated(context: Context) {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .edit().putBoolean(KEY_URLS_MIGRATED, true).apply()
+    }
+
+    /** Your Watchlist / Wishlist page URLs on [store], found by the first full sync. */
+    fun listUrls(context: Context, store: Store): List<String> =
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getStringSet("list_urls_${store.name}", emptySet()).orEmpty().sorted()
+
+    fun setListUrls(context: Context, store: Store, urls: List<String>) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit().putStringSet("list_urls_${store.name}", urls.toSet()).apply()
+    }
+
+    fun allListUrls(context: Context): List<String> = Store.entries.flatMap { listUrls(context, it) }
+
+    fun lastListSync(context: Context): Long =
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getLong(KEY_LAST_LIST_SYNC, 0L)
+
+    fun listSyncSummary(context: Context): String? =
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString(KEY_LIST_SYNC_SUMMARY, null)
+
+    fun setListSyncResult(context: Context, summary: String) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
+            .putLong(KEY_LAST_LIST_SYNC, System.currentTimeMillis())
+            .putString(KEY_LIST_SYNC_SUMMARY, summary)
+            .apply()
     }
 }

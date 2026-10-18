@@ -71,11 +71,31 @@ class WatchRepository(private val dao: WatchDao) {
         return id > 0
     }
 
-    /** Adds every card that isn't watched yet; returns how many were added. */
-    suspend fun importCards(defaultStore: Store, cards: List<GameCard>): Int =
-        cards.count { card ->
-            addIfMissing(card.url, Store.fromUrl(card.url) ?: defaultStore, card.title, card.info)
+    /** Adds every card that isn't watched yet in one batch; returns how many were added. */
+    suspend fun importCards(defaultStore: Store, cards: List<GameCard>): Int {
+        if (cards.isEmpty()) return 0
+        val existing = dao.allUrls().toHashSet()
+        val now = System.currentTimeMillis()
+        val newItems = cards.mapNotNull { card ->
+            val url = UrlUtils.normalize(card.url)
+            if (!existing.add(url)) return@mapNotNull null
+            val price = card.info.price
+            WatchItem(
+                url = url,
+                store = Store.fromUrl(url) ?: defaultStore,
+                title = card.title,
+                imageUrl = card.info.imageUrl,
+                currentPrice = price,
+                priceText = if (price != null) card.info.priceText else null,
+                currency = card.info.currency ?: PriceFormat.symbolFrom(card.info.priceText),
+                lowestPrice = price,
+                addedAt = now,
+                lastChecked = if (price != null) now else null,
+            )
         }
+        if (newItems.isEmpty()) return 0
+        return dao.insertAll(newItems).count { it > 0 }
+    }
 
     /** Re-keys items saved by older versions (slug URLs) to the canonical game URL. */
     suspend fun migrateUrls() {

@@ -29,19 +29,33 @@ class HttpPriceFetcher(context: Context) {
         "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36"
     )
 
+    data class HtmlResult(val code: Int, val html: String, val finalUrl: String)
+
+    /** Downloads a page's HTML with your login cookies; null on network errors. */
+    suspend fun fetchHtml(url: String): HtmlResult? = withContext(Dispatchers.IO) {
+        runCatching {
+            client.newCall(request(url)).execute().use { response ->
+                HtmlResult(response.code, response.body?.string().orEmpty(), response.request.url.toString())
+            }
+        }.getOrNull()
+    }
+
+    private fun request(url: String): Request {
+        val builder = Request.Builder()
+            .url(url)
+            .header("User-Agent", userAgent)
+            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+            .header("Accept-Language", Locale.getDefault().toLanguageTag())
+        runCatching { CookieManager.getInstance().getCookie(url) }.getOrNull()
+            ?.takeIf { it.isNotBlank() }
+            ?.let { builder.header("Cookie", it) }
+        return builder.build()
+    }
+
     /** Returns the parsed price, or null plus a human-readable error. */
     suspend fun fetch(url: String): Pair<PriceInfo?, String?> = withContext(Dispatchers.IO) {
         try {
-            val builder = Request.Builder()
-                .url(url)
-                .header("User-Agent", userAgent)
-                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-                .header("Accept-Language", Locale.getDefault().toLanguageTag())
-            runCatching { CookieManager.getInstance().getCookie(url) }.getOrNull()
-                ?.takeIf { it.isNotBlank() }
-                ?.let { builder.header("Cookie", it) }
-
-            client.newCall(builder.build()).execute().use { response ->
+            client.newCall(request(url)).execute().use { response ->
                 if (!response.isSuccessful) {
                     return@withContext null to "HTTP ${response.code} – tap ↻ in the app to refresh"
                 }

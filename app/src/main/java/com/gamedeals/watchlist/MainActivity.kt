@@ -37,6 +37,9 @@ import com.gamedeals.watchlist.ui.AppRoot
 import com.gamedeals.watchlist.ui.BrowserCallbacks
 import com.gamedeals.watchlist.ui.BrowserState
 import com.gamedeals.watchlist.ui.DealsTheme
+import com.gamedeals.watchlist.sync.ListSyncRunner
+import com.gamedeals.watchlist.sync.SiteListSync
+import com.gamedeals.watchlist.sync.WebViewHtmlLoader
 import com.gamedeals.watchlist.web.evaluate
 import com.gamedeals.watchlist.work.WebViewPriceRefresher
 import kotlinx.coroutines.Dispatchers
@@ -87,6 +90,7 @@ class MainActivity : ComponentActivity(), BrowserCallbacks {
         ) {
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
+        autoSyncSiteListsIfDue()
         setContent {
             DealsTheme { AppRoot(this) }
         }
@@ -130,32 +134,70 @@ class MainActivity : ComponentActivity(), BrowserCallbacks {
         }
     }
 
-    /**
-     * After each page load:
-     *  - if the page is a watched game, quietly refresh its stored price;
-     *  - if auto-sync is on, add any games marked as on your site watchlist / wishlist.
-     */
+    /** When you open a watched game's page, quietly refresh its stored price. */
     override fun onPageLoaded(url: String, view: WebView) {
-        val isGame = UrlUtils.isGamePage(url)
-        if (!isGame && !Prefs.autoSync(this)) return // nothing to do on this page
+        if (!UrlUtils.isGamePage(url)) return
         lifecycleScope.launch {
-            val item = if (isGame) AppDatabase.get(this@MainActivity).watchDao().findByUrl(UrlUtils.normalize(url)) else null
-            if (item == null && isGame) return@launch
-            delay(1_200) // let the page finish rendering prices and list icons
-            if (item != null) {
-                val info = PriceParser.fromJsResult(view.evaluate(PriceScripts.EXTRACT))
-                if (info?.price != null) PriceUpdater.apply(this@MainActivity, item.id, info, notify = false)
-            }
-            // Game pages only show related games, so list syncing runs on list pages only.
-            if (Prefs.autoSync(this@MainActivity) && !UrlUtils.isGamePage(url)) {
-                val store = Store.fromUrl(url) ?: return@launch
-                val onSiteLists = scanPage(view).filter { it.onSiteList }
-                if (onSiteLists.isEmpty()) return@launch
-                val added = repo.importCards(store, onSiteLists)
-                if (added > 0) {
-                    toast("Synced $added game${if (added == 1) "" else "s"} from your ${store.host} lists")
+            val item = AppDatabase.get(this@MainActivity).watchDao().findByUrl(UrlUtils.normalize(url)) ?: return@launch
+            delay(800) // let the page finish rendering its price
+            val info = PriceParser.fromJsResult(view.evaluate(PriceScripts.EXTRACT))
+            if (info?.price != null) PriceUpdater.apply(this@MainActivity, item.id, info, notify = false)
+        }
+    }
+
+    /** Live sync: games on your site lists showed up on the page you're browsing. */
+    override fun onCardsFound(cards: List<GameCard>, view: WebView) {
+        if (!Prefs.autoSync(this)) return
+        val store = Store.fromUrl(view.url) ?: return
+        lifecycleScope.launch {
+            val added = repo.importCards(store, cards)
+            if (added > 0) toast("Synced $added game${if (added == 1) "" else "s"} from your ${store.host} lists")
+        }
+    }
+
+    /** Progress text while a full site-list sync runs, null otherwise. */
+    var listSyncStatus by mutableStateOf<String?>(null)
+        private set
+
+    /** Bumped after each full sync so the UI re-reads the saved summary. */
+    var listSyncVersion by mutableStateOf(0)
+        private set
+
+    /**
+     * Full sync: reads every page of your Watchlist / Wishlist on all three sites.
+     * [manual] shows the result even when nothing changed.
+     */
+    fun syncSiteLists(manual: Boolean) {
+        if (listSyncStatus != null) return
+        listSyncStatus = "Starting…"
+        lifecycleScope.launch {
+            try {
+                val outcome = ListSyncRunner.run(this@MainActivity, allowWebView = true) { progress ->
+                    runOnUiThread { listSyncStatus = progress }
                 }
+                val parts = buildList {
+                    if (outcome.added > 0) add("${outcome.added} new game${if (outcome.added == 1) "" else "s"} added")
+                    if (outcome.pricesUpdated > 0) add("${outcome.pricesUpdated} price${if (outcome.pricesUpdated == 1) "" else "s"} updated")
+                }
+                when {
+                    parts.isNotEmpty() -> toast("Site lists synced: " + parts.joinToString(", "))
+                    manual && outcome.anySignedIn -> toast("Site lists synced – already up to date")
+                    manual -> toast("Sign in on the Xbox, PlayStation or Nintendo tab first")
+                }
+            } finally {
+                listSyncStatus = null
+                listSyncVersion++
             }
+        }
+    }
+
+    /** Runs a full sync on app start when it's on and hasn't run for a while. */
+    private fun autoSyncSiteListsIfDue() {
+        if (!Prefs.autoSync(this)) return
+        if (System.currentTimeMillis() - Prefs.lastListSync(this) < 6 * 60 * 60 * 1000L) return
+        lifecycleScope.launch {
+            delay(3_000) // don't compete with app startup
+            syncSiteLists(manual = false)
         }
     }
 
@@ -180,9 +222,23 @@ class MainActivity : ComponentActivity(), BrowserCallbacks {
         }
     }
 
-    /** Game cards on the page shown in [view] (used by import and auto-sync). */
-    suspend fun scanPage(view: WebView): List<GameCard> =
-        PriceParser.cardsFromJsResult(view.evaluate(PriceScripts.SCAN_PAGE))
+    /**
+     * Game cards on the page shown in [view] **and all following pages** of the same list
+     * (the sites show 36 games per page), for "Import games from this page".
+     */
+    suspend fun scanAllPages(view: WebView, onProgress: (String) -> Unit): List<GameCard> {
+        val first = PriceParser.scanFromJsResult(view.evaluate(PriceScripts.SCAN_PAGE))
+        val next = first.nextUrl ?: return first.cards
+        val loader = WebViewHtmlLoader(this)
+        return try {
+            val rest = SiteListSync(this).crawl(next, loader, yourList = false) { page ->
+                onProgress("Reading page ${page + 1}…")
+            }
+            (first.cards + rest.cards).distinctBy { UrlUtils.normalize(it.url) }
+        } finally {
+            loader.close()
+        }
+    }
 
     suspend fun importCards(store: Store, cards: List<GameCard>): Int = repo.importCards(store, cards)
 

@@ -37,6 +37,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -64,6 +65,10 @@ private enum class SortMode(val label: String) { RECENT("Recent"), TARGET("Close
 @Composable
 fun WatchlistScreen(
     watchItems: List<WatchItem>,
+    listSyncStatus: String?,
+    lastListSync: Long,
+    listSyncSummary: String?,
+    onSyncLists: () -> Unit,
     refreshProgress: Pair<Int, Int>?,
     intervalHours: Int,
     blockAds: Boolean,
@@ -186,6 +191,13 @@ fun WatchlistScreen(
                     )
                 }
             }
+
+            SiteListSyncRow(
+                status = listSyncStatus,
+                lastSync = lastListSync,
+                summary = listSyncSummary,
+                onSync = onSyncLists,
+            )
 
             if (shown.isEmpty()) {
                 EmptyState(hasAny = watchItems.isNotEmpty())
@@ -355,5 +367,47 @@ private fun PriceCell(label: String, value: String, modifier: Modifier = Modifie
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+    }
+}
+
+/** "Site lists" status: last full sync and per-site counts, with a Sync now button. */
+@Composable
+private fun SiteListSyncRow(status: String?, lastSync: Long, summary: String?, onSync: () -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Site watchlists & wishlists", style = MaterialTheme.typography.labelLarge)
+                val detail = when {
+                    status != null -> status
+                    lastSync == 0L -> "Not synced yet – sign in on each site tab, then tap Sync"
+                    else -> "Synced " + DateUtils.getRelativeTimeSpanString(
+                        lastSync, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS,
+                    ) + (summary?.let { " · $it" } ?: "")
+                }
+                Text(
+                    detail,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (status != null) {
+                Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                }
+            } else {
+                TextButton(onClick = onSync) { Text("Sync now") }
+            }
+        }
     }
 }

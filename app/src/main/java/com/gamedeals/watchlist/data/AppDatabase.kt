@@ -28,8 +28,15 @@ interface WatchDao {
     @Query("SELECT * FROM watch_items WHERE url = :url LIMIT 1")
     suspend fun findByUrl(url: String): WatchItem?
 
+    @Query("SELECT url FROM watch_items")
+    suspend fun allUrls(): List<String>
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(item: WatchItem): Long
+
+    /** Inserts many items in one transaction; already-watched URLs are skipped (-1). */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertAll(items: List<WatchItem>): List<Long>
 
     @Update
     suspend fun update(item: WatchItem)
