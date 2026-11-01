@@ -10,8 +10,14 @@ object Prefs {
     private const val KEY_LITE_MODE = "lite_mode"
     private const val KEY_URLS_MIGRATED = "urls_migrated_v2"
     private const val KEY_LAST_LIST_SYNC = "last_list_sync"
+    private const val KEY_DAILY_HOUR = "daily_refresh_hour"
+    private const val KEY_DAILY_SUMMARY = "daily_summary"
+    private const val KEY_LAST_BG_REFRESH = "last_background_refresh"
+    private const val KEY_LAST_BG_SUMMARY = "last_background_summary"
+    private const val KEY_SCHEDULE_VERSION = "schedule_version"
+    const val DEFAULT_DAILY_HOUR = 8
     private const val KEY_LIST_SYNC_SUMMARY = "list_sync_summary"
-    const val DEFAULT_INTERVAL_HOURS = 12
+    const val DEFAULT_INTERVAL_HOURS = 24
     val INTERVAL_OPTIONS = listOf(0, 6, 12, 24)
 
     fun intervalHours(context: Context): Int =
@@ -79,5 +85,42 @@ object Prefs {
             .putLong(KEY_LAST_LIST_SYNC, System.currentTimeMillis())
             .putString(KEY_LIST_SYNC_SUMMARY, summary)
             .apply()
+    }
+
+    /** Hour of day (local time) for the daily background refresh. */
+    fun dailyRefreshHour(context: Context): Int =
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getInt(KEY_DAILY_HOUR, DEFAULT_DAILY_HOUR)
+
+    fun setDailyRefreshHour(context: Context, hour: Int) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putInt(KEY_DAILY_HOUR, hour).apply()
+    }
+
+    /** Send one summary notification after each background refresh that found something. */
+    fun dailySummary(context: Context): Boolean =
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getBoolean(KEY_DAILY_SUMMARY, true)
+
+    fun setDailySummary(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putBoolean(KEY_DAILY_SUMMARY, enabled).apply()
+    }
+
+    fun lastBackgroundRefresh(context: Context): Long =
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getLong(KEY_LAST_BG_REFRESH, 0L)
+
+    fun lastBackgroundSummary(context: Context): String? =
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString(KEY_LAST_BG_SUMMARY, null)
+
+    fun setLastBackgroundRefresh(context: Context, summary: String) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
+            .putLong(KEY_LAST_BG_REFRESH, System.currentTimeMillis())
+            .putString(KEY_LAST_BG_SUMMARY, summary)
+            .apply()
+    }
+
+    /** Bumped when the background schedule changes shape, so existing installs get rescheduled once. */
+    fun scheduleVersion(context: Context): Int =
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getInt(KEY_SCHEDULE_VERSION, 1)
+
+    fun setScheduleVersion(context: Context, version: Int) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putInt(KEY_SCHEDULE_VERSION, version).apply()
     }
 }

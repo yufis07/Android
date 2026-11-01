@@ -172,7 +172,7 @@ fun AppRoot(activity: MainActivity) {
                     onIntervalChange = { hours ->
                         intervalHours = hours
                         Prefs.setIntervalHours(activity, hours)
-                        PriceCheckScheduler.schedule(activity, hours, replace = true)
+                        PriceCheckScheduler.schedule(activity, replace = true)
                     },
                     onRunBackgroundCheck = { PriceCheckScheduler.runNow(activity) },
                     onSignOut = activity::signOutAll,

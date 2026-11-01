@@ -1,5 +1,11 @@
 package com.gamedeals.watchlist.ui
 
+import android.text.format.DateUtils
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.FilterChip
+import androidx.compose.ui.platform.LocalContext
+import com.gamedeals.watchlist.work.RefreshTime
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -166,7 +172,11 @@ fun SettingsDialog(
     onRunBackgroundCheck: () -> Unit,
     onSignOut: () -> Unit,
 ) {
+    val context = LocalContext.current
     var selected by remember { mutableIntStateOf(currentInterval) }
+    val initialHour = remember { Prefs.dailyRefreshHour(context) }
+    var dailyHour by remember { mutableIntStateOf(initialHour) }
+    var summaryOn by remember { mutableStateOf(Prefs.dailySummary(context)) }
     var adsBlocked by remember { mutableStateOf(blockAds) }
     var syncing by remember { mutableStateOf(autoSync) }
     var lite by remember { mutableStateOf(liteMode) }
@@ -177,7 +187,12 @@ fun SettingsDialog(
         title = { Text("Settings") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text("Background price checks", style = MaterialTheme.typography.titleSmall)
+                Text("Background refresh", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Pulls your site watchlists & wishlists and checks every price, even when the app is closed.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 Spacer(Modifier.height(4.dp))
                 Prefs.INTERVAL_OPTIONS.forEach { hours ->
                     Row(
@@ -188,12 +203,58 @@ fun SettingsDialog(
                     ) {
                         RadioButton(selected = selected == hours, onClick = { selected = hours })
                         Spacer(Modifier.width(4.dp))
-                        Text(if (hours == 0) "Off" else "Every $hours hours")
+                        Text(
+                            when (hours) {
+                                0 -> "Off"
+                                24 -> "Daily (recommended)"
+                                else -> "Every $hours hours"
+                            }
+                        )
                     }
                 }
+                if (selected == 24) {
+                    Text("Time of day", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 4.dp))
+                    Row(
+                        Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        RefreshTime.HOUR_OPTIONS.forEach { h ->
+                            FilterChip(
+                                selected = dailyHour == h,
+                                onClick = { dailyHour = h },
+                                label = { Text(RefreshTime.label(h)) },
+                            )
+                        }
+                    }
+                }
+                if (selected > 0) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            "Summary notification after each refresh",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Switch(checked = summaryOn, onCheckedChange = {
+                            summaryOn = it
+                            Prefs.setDailySummary(context, it)
+                        })
+                    }
+                }
+                val lastRun = Prefs.lastBackgroundRefresh(context)
+                Text(
+                    if (lastRun == 0L) "No background refresh has run yet"
+                    else "Last refresh " + DateUtils.getRelativeTimeSpanString(
+                        lastRun, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS,
+                    ) + (Prefs.lastBackgroundSummary(context)?.let { " · $it" } ?: ""),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 Spacer(Modifier.height(8.dp))
                 OutlinedButton(onClick = onRunBackgroundCheck, modifier = Modifier.fillMaxWidth()) {
-                    Text("Run background check now")
+                    Text("Run background refresh now")
                 }
                 Spacer(Modifier.height(12.dp))
                 HorizontalDivider()
@@ -298,7 +359,8 @@ fun SettingsDialog(
         },
         confirmButton = {
             TextButton(onClick = {
-                if (selected != currentInterval) onIntervalChange(selected)
+                if (dailyHour != initialHour) Prefs.setDailyRefreshHour(context, dailyHour)
+                if (selected != currentInterval || dailyHour != initialHour) onIntervalChange(selected)
                 onDismiss()
             }) { Text("Done") }
         },

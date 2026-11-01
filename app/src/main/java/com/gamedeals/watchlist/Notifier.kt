@@ -16,6 +16,8 @@ import com.gamedeals.watchlist.price.PriceFormat
 
 object Notifier {
     const val CHANNEL_ID = "price_alerts"
+    const val SUMMARY_CHANNEL_ID = "refresh_summary"
+    private const val SUMMARY_NOTIFICATION_ID = -1
 
     fun createChannel(context: Context) {
         val channel = NotificationChannel(
@@ -23,8 +25,42 @@ object Notifier {
             context.getString(R.string.channel_price_alerts),
             NotificationManager.IMPORTANCE_DEFAULT,
         ).apply { description = "Alerts when a watched game hits your target price or drops in price" }
-        context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        val summary = NotificationChannel(
+            SUMMARY_CHANNEL_ID,
+            "Daily refresh summary",
+            NotificationManager.IMPORTANCE_LOW,
+        ).apply { description = "One quiet summary after each background refresh that found something new" }
+        context.getSystemService(NotificationManager::class.java).createNotificationChannels(listOf(channel, summary))
     }
+
+    /** One quiet notification summarising a background refresh; tapping it opens the watchlist. */
+    fun showRefreshSummary(context: Context, title: String, lines: List<String>) {
+        if (!canNotify(context)) return
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pending = PendingIntent.getActivity(
+            context, SUMMARY_NOTIFICATION_ID, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val style = NotificationCompat.InboxStyle().also { st -> lines.forEach { st.addLine(it) } }
+        val notification = NotificationCompat.Builder(context, SUMMARY_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title)
+            .setContentText(lines.firstOrNull() ?: "")
+            .setStyle(style)
+            .setContentIntent(pending)
+            .setAutoCancel(true)
+            .build()
+        try {
+            NotificationManagerCompat.from(context).notify(SUMMARY_NOTIFICATION_ID, notification)
+        } catch (_: SecurityException) {
+        }
+    }
+
+    private fun canNotify(context: Context): Boolean =
+        Build.VERSION.SDK_INT < 33 ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
     /** Decides whether [new] warrants an alert compared with [old]; returns [new] with updated alert bookkeeping. */
     fun process(context: Context, old: WatchItem, new: WatchItem): WatchItem {
