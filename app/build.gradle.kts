@@ -13,14 +13,29 @@ val signingPassword: String? = System.getenv("SIGNING_PASSWORD")?.takeIf { it.is
 
 android {
     namespace = "com.gamedeals.watchlist"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.gamedeals.watchlist"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 2
-        versionName = "1.1.0"
+        targetSdk = 36 // Google Play requires API 36 for new apps and updates
+        // Every CI build gets a higher version code, as Play requires for each upload.
+        versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()?.plus(100) ?: 3
+        versionName = "1.3.0"
+    }
+
+    // "play": the Google Play build (uploaded as an .aab; ad blocking starts off).
+    // "sideload": the APK you install yourself (ad blocking starts on).
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("play") {
+            dimension = "distribution"
+            buildConfigField("boolean", "DEFAULT_BLOCK_ADS", "false")
+        }
+        create("sideload") {
+            dimension = "distribution"
+            buildConfigField("boolean", "DEFAULT_BLOCK_ADS", "true")
+        }
     }
 
     signingConfigs {
@@ -54,6 +69,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -75,6 +91,8 @@ dependencies {
     ksp("androidx.room:room-compiler:2.6.1")
 
     implementation("androidx.work:work-runtime-ktx:2.10.0")
+    // Origin-restricted JavaScript bridge (WebViewCompat.addWebMessageListener)
+    implementation("androidx.webkit:webkit:1.12.1")
     // Installs the bundled baseline profiles (ours + Compose's) on sideloaded installs for faster startup/scrolling
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")

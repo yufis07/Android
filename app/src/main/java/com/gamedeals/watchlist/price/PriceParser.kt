@@ -116,7 +116,7 @@ object PriceParser {
             )
         }
 
-    /** Parses the JSON sent by [PriceScripts.SITE_BRIDGE] when a site watchlist/wishlist button is used. */
+    /** Parses the JSON sent by [PriceScripts.siteBridge] when a site watchlist/wishlist button is used. */
     fun siteAddFromJson(json: String): SiteListAdd? = runCatching {
         val o = JSONObject(json)
         val priceText = o.str("priceText")

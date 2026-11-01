@@ -29,7 +29,6 @@ class WebViewHtmlLoader(private val context: Context) {
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
         settings.blockNetworkImage = true
-        settings.userAgentString = settings.userAgentString.replace("; wv", "")
         webView = this
     }
 

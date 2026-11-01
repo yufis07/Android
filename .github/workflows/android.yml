@@ -19,7 +19,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Unit tests
-        run: ./gradlew testDebugUnitTest --stacktrace
+        run: ./gradlew testSideloadDebugUnitTest --stacktrace
 
       # Optional: sign with your own key so every build installs over the previous one.
       # Add repository secrets SIGNING_KEYSTORE_BASE64 (base64 of a .p12 keystore) and SIGNING_PASSWORD.
@@ -31,17 +31,24 @@ jobs:
           echo "$SIGNING_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.p12"
           echo "SIGNING_KEYSTORE_FILE=$RUNNER_TEMP/release.p12" >> "$GITHUB_ENV"
 
-      - name: Build optimized release APK
+      - name: Build release APK (sideload) and App Bundle (Google Play)
         env:
           SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
         run: |
           if [ -z "${SIGNING_KEYSTORE_FILE:-}" ]; then
-            echo "::warning::No signing secrets set - release APK is signed with a temporary debug key and won't install over a previous build."
+            echo "::warning::No signing secrets set - builds are signed with a temporary debug key. The APK won't install over a previous build and Google Play will reject the .aab."
           fi
-          ./gradlew assembleRelease --stacktrace
-          ls -la app/build/outputs/apk/release/
+          ./gradlew assembleSideloadRelease bundlePlayRelease --stacktrace
+          ls -la app/build/outputs/apk/sideload/release/ app/build/outputs/bundle/playRelease/
 
       - uses: actions/upload-artifact@v4
         with:
           name: GameDealsWatch-apk
-          path: app/build/outputs/apk/release/app-release.apk
+          path: app/build/outputs/apk/sideload/release/app-sideload-release.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GameDealsWatch-play-bundle
+          path: |
+            app/build/outputs/bundle/playRelease/app-play-release.aab
+            app/build/outputs/mapping/playRelease/mapping.txt

@@ -1,5 +1,7 @@
 package com.gamedeals.watchlist.price
 
+import org.json.JSONArray
+
 /** JavaScript injected into the WebView to read the current game's price. Mirrors [PriceParser.fromHtml]. */
 object PriceScripts {
     val EXTRACT = """
@@ -132,12 +134,18 @@ object PriceScripts {
      * `game_id`; we spot that request, look up the game's card and tell the app, so the game
      * is added to the app's watchlist too.
      */
-    val SITE_BRIDGE get() = BRIDGE_HEAD + "\n" + CARD_READER + "\n" + BRIDGE_BODY
+    fun siteBridge(syncOn: Boolean, listUrls: List<String>): String =
+        BRIDGE_HEAD + "\nvar gdwSyncOn = " + syncOn + "; var gdwListUrls = " + JSONArray(listUrls) + ";\n" +
+            CARD_READER + "\n" + BRIDGE_BODY
 
     private val BRIDGE_HEAD = """
         (function () {
+          // window.GameDealsApp only exists on xbdeals / psdeals / ntdeals pages (origin-restricted listener).
           if (window.__gdwBridge || !window.GameDealsApp) return;
           window.__gdwBridge = true;
+          function post(type, data) {
+            try { window.GameDealsApp.postMessage(JSON.stringify({ type: type, data: data })); } catch (e) {}
+          }
     """.trimIndent()
 
     private val BRIDGE_BODY = """
@@ -160,7 +168,7 @@ object PriceScripts {
             var b = body == null ? '' : (typeof body === 'string' ? body : (body.toString ? body.toString() : ''));
             var id = (b.match(/game_id=(\d+)/) || [])[1];
             if (!id) return;
-            try { window.GameDealsApp.onSiteListAdd(JSON.stringify(info(id, m[1] + 'list'))); } catch (e) {}
+            post('add', info(id, m[1] + 'list'));
           }
           var open = XMLHttpRequest.prototype.open, send = XMLHttpRequest.prototype.send;
           XMLHttpRequest.prototype.open = function (method, url) { this.__gdwUrl = url; return open.apply(this, arguments); };
@@ -175,9 +183,12 @@ object PriceScripts {
 
           // Live sync: whenever game cards appear or change (lazy loading, "load more", list
           // markers filled in after the page loads), report games that are on your lists.
-          var syncOn = false, listPage = false;
-          try { syncOn = !!window.GameDealsApp.syncEnabled(); listPage = !!window.GameDealsApp.isListPage(location.href); } catch (e) {}
-          if (!syncOn) return;
+          function norm(u) {
+            return String(u).split('#')[0].split('?')[0].replace(/\/+$/, '').toLowerCase().replace('://www.', '://');
+          }
+          var listPage = gdwListUrls.map(norm).indexOf(norm(location.href)) >= 0 ||
+            (/(watch|wish)[-_]?list/i.test(location.pathname) && location.pathname.indexOf('/game/') < 0);
+          if (!gdwSyncOn) return;
           var reported = {}, timer = null;
           function syncScan() {
             var cards = gdwReadCards();
@@ -186,7 +197,7 @@ object PriceScripts {
             var fresh = use.filter(function (c) { return !reported[c.id]; });
             if (!fresh.length) return;
             fresh.forEach(function (c) { reported[c.id] = true; c.watchlisted = c.watchlisted || (listPage && !c.wishlisted); });
-            try { window.GameDealsApp.onCardsFound(JSON.stringify(fresh)); } catch (e) {}
+            post('cards', fresh);
           }
           function schedule() { if (!timer) timer = setTimeout(function () { timer = null; syncScan(); }, 600); }
           schedule();

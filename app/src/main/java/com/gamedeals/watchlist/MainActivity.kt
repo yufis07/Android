@@ -16,6 +16,7 @@ import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -83,6 +84,8 @@ class MainActivity : ComponentActivity(), BrowserCallbacks {
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Required for apps targeting Android 15+: draw behind the system bars; screens pad themselves.
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         pendingOpenUrl = urlFrom(intent)
         if (Build.VERSION.SDK_INT >= 33 &&

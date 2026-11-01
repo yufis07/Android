@@ -2,16 +2,18 @@ package com.gamedeals.watchlist.ui
 
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.webkit.CookieManager
-import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Toast
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
+import org.json.JSONObject
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -22,7 +24,6 @@ import com.gamedeals.watchlist.price.GameCard
 import com.gamedeals.watchlist.price.PriceParser
 import com.gamedeals.watchlist.price.PriceScripts
 import com.gamedeals.watchlist.price.SiteListAdd
-import com.gamedeals.watchlist.price.UrlUtils
 import com.gamedeals.watchlist.web.AdBlocker
 import com.gamedeals.watchlist.web.LiteMode
 
@@ -37,41 +38,19 @@ interface BrowserCallbacks {
     fun onCardsFound(cards: List<GameCard>, view: WebView)
 }
 
-/** Receives messages from [PriceScripts.SITE_BRIDGE] running in the page. */
-private class SiteBridge(
-    private val context: Context,
-    private val view: WebView,
-    private val callbacks: BrowserCallbacks,
-) {
-    @JavascriptInterface
-    fun syncEnabled(): Boolean = Prefs.autoSync(context)
+/** Only these sites may message the app (via `window.GameDealsApp.postMessage`). */
+private val BRIDGE_ORIGINS = Store.entries.flatMap { listOf("https://${it.host}", "https://www.${it.host}") }.toSet()
 
-    /** Your own Watchlist / Wishlist page (remembered from the full sync, or by its address). */
-    @JavascriptInterface
-    fun isListPage(url: String?): Boolean {
-        if (url.isNullOrBlank()) return false
-        val key = UrlUtils.normalize(url)
-        if (Prefs.allListUrls(context).any { UrlUtils.normalize(it) == key }) return true
-        val path = url.substringAfter("://").substringAfter('/', "")
-        return Regex("(?i)(watch|wish)[-_]?list").containsMatchIn(path) && "/game/" !in path
-    }
-
-    @JavascriptInterface
-    fun onCardsFound(json: String) {
-        val cards = PriceParser.cardsFromJsResult(json)
-        if (cards.isEmpty()) return
-        view.post {
-            if (Store.fromUrl(view.url) != null) callbacks.onCardsFound(cards, view)
-        }
-    }
-
-    @JavascriptInterface
-    fun onSiteListAdd(json: String) {
-        val add = PriceParser.siteAddFromJson(json) ?: return
-        view.post {
-            // Only trust messages while a deal site is the page shown in this tab.
-            if (Store.fromUrl(view.url) != null) callbacks.onSiteListAdd(add, view)
-        }
+/** Handles messages from [PriceScripts.siteBridge] running in a deal-site page. */
+private fun handleBridgeMessage(json: String, view: WebView, callbacks: BrowserCallbacks) {
+    val msg = runCatching { JSONObject(json) }.getOrNull() ?: return
+    if (Store.fromUrl(view.url) == null) return
+    when (msg.optString("type")) {
+        "add" -> PriceParser.siteAddFromJson(msg.optJSONObject("data")?.toString() ?: return)
+            ?.let { callbacks.onSiteListAdd(it, view) }
+        "cards" -> PriceParser.cardsFromJsResult(msg.optJSONArray("data")?.toString() ?: return)
+            .takeIf { it.isNotEmpty() }
+            ?.let { callbacks.onCardsFound(it, view) }
     }
 }
 
@@ -115,8 +94,6 @@ class BrowserState private constructor(val store: Store) {
                 displayZoomControls = false
                 javaScriptCanOpenWindowsAutomatically = true
                 setSupportMultipleWindows(false) // pop-ups (e.g. social login) open in the same view
-                // Some sign-in providers refuse embedded browsers; drop the WebView marker.
-                userAgentString = userAgentString.replace("; wv", "")
             }
             CookieManager.getInstance().apply {
                 setAcceptCookie(true)
@@ -125,6 +102,15 @@ class BrowserState private constructor(val store: Store) {
             webView.webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                     val scheme = request.url.scheme?.lowercase()
+                    // Google doesn't allow its sign-in inside in-app browsers; explain instead of erroring.
+                    if (request.url.host.equals("accounts.google.com", ignoreCase = true)) {
+                        Toast.makeText(
+                            activity,
+                            "Google sign-in isn't available inside apps. Please sign in with your email and password on the site.",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                        return true
+                    }
                     if (scheme == "http" || scheme == "https") return false
                     // mailto:, intent:, store links, etc. go to other apps.
                     runCatching { activity.startActivity(Intent(Intent.ACTION_VIEW, request.url)) }
@@ -136,7 +122,7 @@ class BrowserState private constructor(val store: Store) {
                         ?: LiteMode.intercept(request, Prefs.liteMode(activity))
 
                 override fun onPageCommitVisible(view: WebView, url: String?) {
-                    view.evaluateJavascript(PriceScripts.SITE_BRIDGE, null)
+                    view.evaluateJavascript(PriceScripts.siteBridge(Prefs.autoSync(activity), Prefs.allListUrls(activity)), null)
                     if (Prefs.blockAds(activity)) view.evaluateJavascript(AdBlocker.HIDE_ADS_SCRIPT, null)
                 }
 
@@ -149,7 +135,7 @@ class BrowserState private constructor(val store: Store) {
                     state.loading = false
                     state.syncNav(view)
                     CookieManager.getInstance().flush()
-                    view.evaluateJavascript(PriceScripts.SITE_BRIDGE, null)
+                    view.evaluateJavascript(PriceScripts.siteBridge(Prefs.autoSync(activity), Prefs.allListUrls(activity)), null)
                     if (Prefs.blockAds(activity)) view.evaluateJavascript(AdBlocker.HIDE_ADS_SCRIPT, null)
                     if (url != null) {
                         state.url = url
@@ -171,7 +157,12 @@ class BrowserState private constructor(val store: Store) {
                     if (!title.isNullOrBlank()) state.title = title
                 }
             }
-            webView.addJavascriptInterface(SiteBridge(activity, webView, callbacks), "GameDealsApp")
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+                WebViewCompat.addWebMessageListener(webView, "GameDealsApp", BRIDGE_ORIGINS) { view, message, _, isMainFrame, _ ->
+                    val data = message.data
+                    if (isMainFrame && data != null) handleBridgeMessage(data, view, callbacks)
+                }
+            }
             state.webView = webView
             webView.loadUrl(store.homeUrl)
             return state

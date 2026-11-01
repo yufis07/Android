@@ -1,6 +1,7 @@
 package com.gamedeals.watchlist.data
 
 import android.content.Context
+import com.gamedeals.watchlist.BuildConfig
 
 object Prefs {
     private const val FILE = "settings"
@@ -30,7 +31,7 @@ object Prefs {
     }
 
     fun blockAds(context: Context): Boolean =
-        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getBoolean(KEY_BLOCK_ADS, true)
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getBoolean(KEY_BLOCK_ADS, BuildConfig.DEFAULT_BLOCK_ADS)
 
     fun setBlockAds(context: Context, enabled: Boolean) {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)

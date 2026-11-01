@@ -24,7 +24,7 @@ class HttpPriceFetcher(context: Context) {
         .build()
 
     private val userAgent: String = runCatching {
-        WebSettings.getDefaultUserAgent(context).replace("; wv", "")
+        WebSettings.getDefaultUserAgent(context) // same as the in-app browser, so its cookies stay valid
     }.getOrDefault(
         "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36"
     )
