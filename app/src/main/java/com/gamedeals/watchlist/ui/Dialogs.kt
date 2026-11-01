@@ -1,6 +1,11 @@
 package com.gamedeals.watchlist.ui
 
+import android.content.Intent
+import android.net.Uri
 import android.text.format.DateUtils
+import androidx.compose.foundation.layout.PaddingValues
+import com.gamedeals.watchlist.BuildConfig
+import com.gamedeals.watchlist.R
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.FilterChip
@@ -355,6 +360,27 @@ fun SettingsDialog(
                 OutlinedButton(onClick = { confirmSignOut = true }, modifier = Modifier.fillMaxWidth()) {
                     Text("Sign out of all sites")
                 }
+                Spacer(Modifier.height(12.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(12.dp))
+                Text("About", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Game Deals Watch ${BuildConfig.VERSION_NAME}. An independent app, not affiliated with " +
+                        "xbdeals.net, psdeals.net, ntdeals.net, Microsoft, Sony or Nintendo. Your watchlist " +
+                        "is stored only on this phone.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                TextButton(
+                    onClick = {
+                        runCatching {
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse(context.getString(R.string.privacy_policy_url)))
+                            )
+                        }
+                    },
+                    contentPadding = PaddingValues(0.dp),
+                ) { Text("Privacy policy") }
             }
         },
         confirmButton = {

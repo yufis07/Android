@@ -1,0 +1,38 @@
+Game Deals Watch keeps all the console game deals you care about in one place and tells you when prices drop.
+
+It works with the popular price-tracking sites xbdeals.net (Xbox), psdeals.net (PlayStation) and ntdeals.net (Nintendo Switch). Sign in to your free accounts on those sites inside the app, and your watchlists and wishlists from all three come together in a single list.
+
+<b>One watchlist for every console</b>
+• See games from all three sites side by side
+• Current price, your target price and the lowest price seen, at a glance
+• Filter by store and sort by recently added, closest to target or price
+• Edit, remove and undo in a tap
+
+<b>Price alerts that come to you</b>
+• Set a target price for any game and get notified when it reaches it
+• Get a notification when a watched game drops in price
+• A daily background refresh at the time you choose (6 AM to 9 PM), even when the app is closed
+• One quiet summary notification after each refresh, only when something changed
+
+<b>Your site lists, synced</b>
+• "Sync now" reads every page of your watchlist and wishlist on all three sites
+• Games you add with a site's own Watchlist or Wishlist button appear here automatically
+• Import every game from any list or search page in one go
+
+<b>Fast and light</b>
+• Built-in browser tabs for each site that keep their place as you switch
+• Lite mode skips web fonts and videos for quicker pages
+• Optional ad and tracker blocking in the site tabs
+• Small download with no account, no sign-up and no ads in the app
+
+<b>Private by design</b>
+• Your watchlist is stored only on your phone
+• No analytics and no tracking SDKs
+• Export and import your watchlist as a file whenever you like
+
+How to start:
+1. Open the Xbox, PlayStation or Nintendo tab and sign in with your email and password on the site
+2. Tap "Sync now" on the Watchlist tab, or open any game and tap "Watch"
+3. Set a target price, and let the daily refresh do the rest
+
+Note: Game Deals Watch is an independent app. It is not affiliated with, endorsed by or sponsored by xbdeals.net, psdeals.net, ntdeals.net, Microsoft, Sony Interactive Entertainment or Nintendo. Xbox, PlayStation and Nintendo Switch are trademarks of their respective owners. Prices and availability come from those sites and may change at any time.

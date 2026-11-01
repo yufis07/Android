@@ -1,0 +1,6 @@
+First release:
+• One watchlist for xbdeals, psdeals and ntdeals
+• Target price and price drop alerts
+• Daily background refresh at a time you choose
+• Full sync of your site watchlists and wishlists
+• Lite mode, optional ad blocking, and watchlist backup

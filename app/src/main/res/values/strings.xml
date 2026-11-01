@@ -1,4 +1,6 @@
 <resources>
     <string name="app_name">Game Deals Watch</string>
     <string name="channel_price_alerts">Price alerts</string>
+    <!-- Public privacy policy page (GitHub Pages from the repo's /docs folder). Change if you host it elsewhere. -->
+    <string name="privacy_policy_url" translatable="false">https://yufis07.github.io/Android/privacy-policy.html</string>
 </resources>
