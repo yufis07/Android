@@ -269,8 +269,9 @@ class MainActivity : ComponentActivity(), BrowserCallbacks {
         toast(result.fold({ "Imported $it game${if (it == 1) "" else "s"}" }, { "Import failed: not a watchlist backup" }))
     }
 
+    /** Shows a short message; safe to call from any thread. */
     fun toast(message: String) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+        runOnUiThread { Toast.makeText(this, message, Toast.LENGTH_SHORT).show() }
     }
 
     /** Re-checks every watched game using an off-screen browser. */
