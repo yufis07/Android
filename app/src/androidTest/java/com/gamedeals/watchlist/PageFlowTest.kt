@@ -1,5 +1,6 @@
 package com.gamedeals.watchlist
 
+import android.Manifest
 import android.util.Log
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.hasText
@@ -8,6 +9,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.rule.GrantPermissionRule
 import com.gamedeals.watchlist.data.Prefs
 import com.gamedeals.watchlist.data.Store
 import com.gamedeals.watchlist.price.PriceParser
@@ -45,7 +47,12 @@ class PageFlowTest {
         }
     }
 
-    @get:Rule
+    // Grant the notification permission up front: otherwise Android's permission dialog covers
+    // (and pauses) the app on first launch and the UI can't be driven.
+    @get:Rule(order = 0)
+    val notifications: GrantPermissionRule = GrantPermissionRule.grant(Manifest.permission.POST_NOTIFICATIONS)
+
+    @get:Rule(order = 1)
     val rule = createAndroidComposeRule<MainActivity>()
 
     private fun ps(): BrowserState {
