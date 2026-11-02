@@ -2,11 +2,12 @@ package com.gamedeals.watchlist
 
 import android.Manifest
 import android.util.Log
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
@@ -55,6 +56,12 @@ class PageFlowTest {
     @get:Rule(order = 1)
     val rule = createAndroidComposeRule<MainActivity>()
 
+    /** Clicks via the node's accessibility click action (more reliable than injected touches on CI emulators). */
+    private fun click(text: String) {
+        rule.onNodeWithText(text).performSemanticsAction(SemanticsActions.OnClick)
+        rule.waitForIdle()
+    }
+
     private fun ps(): BrowserState {
         lateinit var state: BrowserState
         rule.runOnUiThread { state = rule.activity.browser(Store.PLAYSTATION) }
@@ -64,7 +71,7 @@ class PageFlowTest {
     private fun openSavedPage(asset: String, url: String, titleContains: String) {
         val html = InstrumentationRegistry.getInstrumentation().context.assets.open(asset)
             .bufferedReader().use { it.readText() }
-        rule.onNodeWithText("PlayStation").performClick()
+        click("PlayStation")
         rule.runOnUiThread { ps().webView.loadDataWithBaseURL(url, html, "text/html", "utf-8", url) }
         rule.waitUntil(30_000) { ps().title.contains(titleContains, ignoreCase = true) && !ps().loading }
         Thread.sleep(1_000)
@@ -78,15 +85,15 @@ class PageFlowTest {
         openSavedPage("psdeals_game.html", GAME, "Sonic Racing")
         Log.i(TAG, "PASS Game page shown in the PlayStation tab: ${ps().title}")
 
-        rule.onNodeWithText("Watch").performClick()
+        click("Watch")
         rule.waitUntil(15_000) { rule.onAllNodes(hasText("Add to watchlist")).fetchSemanticsNodes().isNotEmpty() }
         val priceLine = rule.onNode(hasText("Current price:", substring = true)).fetchSemanticsNode()
             .config[SemanticsProperties.Text].joinToString { it.text }
         assertTrue("Price should be detected, got '$priceLine'", priceLine.contains("39.99"))
         Log.i(TAG, "PASS Watch dialog detected the price ($priceLine)")
 
-        rule.onNodeWithText("Save").performClick()
-        rule.onNodeWithText("Watchlist").performClick()
+        click("Save")
+        click("Watchlist")
         rule.waitUntil(15_000) {
             rule.onAllNodes(hasText("Sonic Racing: CrossWorlds", substring = true)).fetchSemanticsNodes().isNotEmpty()
         }
