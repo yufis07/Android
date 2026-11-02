@@ -4,7 +4,10 @@ import android.Manifest
 import android.util.Log
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
@@ -58,7 +61,9 @@ class PageFlowTest {
 
     /** Clicks via the node's accessibility click action (more reliable than injected touches on CI emulators). */
     private fun click(text: String) {
-        rule.onNodeWithText(text).performSemanticsAction(SemanticsActions.OnClick)
+        rule.onAllNodes(hasClickAction() and (hasText(text) or hasAnyDescendant(hasText(text))), useUnmergedTree = true)
+            .onFirst()
+            .performSemanticsAction(SemanticsActions.OnClick)
         rule.waitForIdle()
     }
 
