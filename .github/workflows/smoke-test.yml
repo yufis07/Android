@@ -43,7 +43,8 @@ jobs:
           script: |
             mkdir -p smoke
             ./gradlew connectedSideloadDebugAndroidTest --stacktrace > smoke/instrumented.txt 2>&1 || touch smoke/instrumented-failed
-            tail -40 smoke/instrumented.txt
+            grep -E "Tests on|FAILED|AssertionError|ComposeTimeoutException|tests completed" smoke/instrumented.txt | head -20
+            find app/build/outputs/androidTest-results -name "*.xml" -exec grep -h -A2 "<failure" {} \; | cut -c1-300 | head -20
             adb logcat -d -s SmokeTest:I | tee smoke/instrumented-results.txt
             bash .github/scripts/smoke.sh
             test ! -f smoke/instrumented-failed

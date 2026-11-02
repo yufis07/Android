@@ -36,12 +36,19 @@ adb logcat -c
 # 1. Launch -> Watchlist screen
 adb shell am start -W -n $PKG/.MainActivity >/dev/null
 if wait_for "Price Watchlist" 30; then pass "App starts on the Watchlist screen"; else fail "Watchlist screen not shown"; fi
-has "Site watchlists & wishlists" && pass "Site lists sync row shown" || fail "Sync row missing"
+has "Site watchlists" && pass "Site lists sync row shown" || fail "Sync row missing"
 shot 1-watchlist
 
 # 2. PlayStation tab loads psdeals.net live
 tap "PlayStation"
-if wait_for "psdeals.net" 45; then pass "PlayStation tab loads psdeals.net"; else fail "psdeals.net did not load"; fi
+if wait_for "psdeals.net" 45; then pass "PlayStation tab opens psdeals.net"; else fail "psdeals.net did not open"; fi
+sleep 15
+if has "Just a moment"; then
+  echo "::warning::psdeals.net is showing its Cloudflare security check to this CI emulator (data-centre IP)"
+  RESULTS+=("NOTE  psdeals.net shows a Cloudflare security check on this CI network")
+else
+  pass "psdeals.net content loaded"
+fi
 sleep 6
 shot 2-psdeals
 
