@@ -42,7 +42,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
             mkdir -p smoke
-            ./gradlew connectedSideloadDebugAndroidTest --stacktrace > smoke/instrumented.txt 2>&1 || touch smoke/instrumented-failed
+            ./gradlew connectedSideloadDebugAndroidTest > smoke/instrumented.txt 2>&1 || touch smoke/instrumented-failed
             grep -E "Tests on|FAILED|AssertionError|ComposeTimeoutException|tests completed" smoke/instrumented.txt | head -20
             find app/build/outputs/androidTest-results -name "*.xml" -exec grep -h -A2 "<failure" {} \; | cut -c1-300 | head -20
             adb logcat -d -s SmokeTest:I | tee smoke/instrumented-results.txt
