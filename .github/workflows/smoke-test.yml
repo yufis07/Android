@@ -25,8 +25,11 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Build release APK
-        run: ./gradlew assembleSideloadRelease
+      - name: Install ImageMagick (screenshots)
+        run: sudo apt-get install -y -qq imagemagick >/dev/null
+
+      - name: Build release APK and test APKs
+        run: ./gradlew assembleSideloadRelease assembleSideloadDebug assembleSideloadDebugAndroidTest
 
       - name: Run on Android 15 emulator
         uses: reactivecircus/android-emulator-runner@v2
@@ -37,10 +40,18 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: bash .github/scripts/smoke.sh
+          script: |
+            mkdir -p smoke
+            ./gradlew connectedSideloadDebugAndroidTest --stacktrace > smoke/instrumented.txt 2>&1 || touch smoke/instrumented-failed
+            tail -40 smoke/instrumented.txt
+            adb logcat -d -s SmokeTest:I | tee smoke/instrumented-results.txt
+            bash .github/scripts/smoke.sh
+            test ! -f smoke/instrumented-failed
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: smoke-test-results
-          path: smoke/
+          path: |
+            smoke/
+            app/build/reports/androidTests/
