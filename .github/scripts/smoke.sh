@@ -13,8 +13,18 @@ fail() { RESULTS+=("FAIL  $1"); echo "::error::FAIL $1"; }
 dump() { adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb shell cat /sdcard/ui.xml > smoke/ui.xml 2>/dev/null; }
 texts() { dump; tr '>' '\n' < smoke/ui.xml | grep -oE '(text|content-desc)="[^"]+"' | sed -E 's/^(text|content-desc)="//; s/"$//' | sort -u; }
 has() { texts | grep -qF -- "$1"; }
+# The CI emulator's own launcher sometimes freezes and covers the screen with an
+# "isn't responding" dialog (not our app). Dismiss it so the test can continue.
+dismiss_system_dialogs() {
+  if grep -q "isn&apos;t responding\|isn't responding" smoke/ui.xml 2>/dev/null; then
+    echo "Dismissing a system 'isn't responding' dialog"
+    local b; b=$(tr '>' '\n' < smoke/ui.xml | grep -m1 'text="Wait"' | grep -oE 'bounds="[^"]+"' | grep -oE '[0-9]+' | tr '\n' ' ')
+    if [ -n "$b" ]; then read -r x1 y1 x2 y2 <<< "$b"; adb shell input tap $(( (x1 + x2) / 2 )) $(( (y1 + y2) / 2 )); fi
+    sleep 1
+  fi
+}
 wait_for() { # wait_for "<text>" <seconds>
-  for _ in $(seq 1 "$2"); do has "$1" && return 0; sleep 1; done; return 1; }
+  for _ in $(seq 1 "$2"); do has "$1" && return 0; dismiss_system_dialogs; sleep 1; done; return 1; }
 tap() { # tap the first node whose text or content-desc equals $1
   dump
   local b; b=$(tr '>' '\n' < smoke/ui.xml | grep -m1 -E "(text|content-desc)=\"$1\"" | grep -oE 'bounds="[^"]+"' | grep -oE '[0-9]+' | tr '\n' ' ')
@@ -31,6 +41,8 @@ shot() {
 adb uninstall $PKG >/dev/null 2>&1 || true
 adb install -r "$APK" && pass "APK installs (release build, $(stat -c %s "$APK") bytes)" || fail "APK install"
 adb shell pm grant $PKG android.permission.POST_NOTIFICATIONS 2>/dev/null || true
+adb shell settings put global hide_error_dialogs 1 2>/dev/null || true
+adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
 adb logcat -c
 
 # 1. Launch -> Watchlist screen
